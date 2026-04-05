@@ -70,7 +70,7 @@ export class AiAuditLedgerStack extends cdk.Stack {
       partitionKey: { name: 'tenant_id', type: dynamodb.AttributeType.STRING },
       sortKey: { name: 'sk', type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
-      pointInTimeRecovery: true,
+      pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true },
       removalPolicy: cdk.RemovalPolicy.RETAIN,
     });
 
@@ -111,7 +111,7 @@ export class AiAuditLedgerStack extends cdk.Stack {
       handler: 'handler',
       timeout: cdk.Duration.seconds(10),
       memorySize: 256,
-      logRetention: logs.RetentionDays.ONE_WEEK,
+      logGroup: new logs.LogGroup(this, 'IngestFnLogGroup', { retention: logs.RetentionDays.ONE_WEEK }),
       environment: {
         QUEUE_URL: queue.queueUrl,
         TENANT_KEY_SECRET_ARN: tenantKeySecret.secretArn,
@@ -130,7 +130,7 @@ export class AiAuditLedgerStack extends cdk.Stack {
       handler: 'handler',
       timeout: cdk.Duration.seconds(60),
       memorySize: 512,
-      logRetention: logs.RetentionDays.ONE_WEEK,
+      logGroup: new logs.LogGroup(this, 'ProcessorFnLogGroup', { retention: logs.RetentionDays.ONE_WEEK }),
       environment: {
         AUDIT_TABLE: auditTable.tableName,
         AUDIT_BUCKET: auditBucket.bucketName,
@@ -150,7 +150,7 @@ export class AiAuditLedgerStack extends cdk.Stack {
       handler: 'handler',
       timeout: cdk.Duration.seconds(30),
       memorySize: 512,
-      logRetention: logs.RetentionDays.ONE_WEEK,
+      logGroup: new logs.LogGroup(this, 'ReadFnLogGroup', { retention: logs.RetentionDays.ONE_WEEK }),
       environment: {
         AUDIT_TABLE: auditTable.tableName,
         AUDIT_BUCKET: auditBucket.bucketName,
@@ -216,6 +216,6 @@ export class AiAuditLedgerStack extends cdk.Stack {
     });
     new cdk.CfnOutput(this, 'AuditTableName', { value: auditTable.tableName });
     new cdk.CfnOutput(this, 'QueueUrl', { value: queue.queueUrl });
-    new cdk.CfnOutput(this, 'RateLimitTable', { value: rateLimitTable.tableName });
+    new cdk.CfnOutput(this, 'RateLimitTableName', { value: rateLimitTable.tableName });
   }
 }
