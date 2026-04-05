@@ -136,7 +136,6 @@ export class AiAuditLedgerStack extends cdk.Stack {
         AUDIT_BUCKET: auditBucket.bucketName,
         RETENTION_YEARS: String(retentionYears),
       },
-      reservedConcurrentExecutions: 10,
     });
     queue.grantConsumeMessages(processorFn);
     processorFn.addEventSource(new SqsEventSource(queue, { batchSize: 10 }));

@@ -1,0 +1,1714 @@
+{
+ "Description": "AI Audit Ledger — API Gateway, SQS, QLDB, Lambdas (EU AI Act Article 12)",
+ "Resources": {
+  "TenantKeyMapSecret550BCED1": {
+   "Type": "AWS::SecretsManager::Secret",
+   "Properties": {
+    "Description": "JSON map of ingest API key → tenant_id for AI Audit Ledger",
+    "Name": "ai-audit-ledger/tenant-key-map",
+    "SecretString": "{\"demo-tenant-key\":\"demo-tenant\"}"
+   },
+   "UpdateReplacePolicy": "Retain",
+   "DeletionPolicy": "Retain",
+   "Metadata": {
+    "aws:cdk:path": "AiAuditLedgerStack/TenantKeyMapSecret/Resource"
+   }
+  },
+  "ReadKeyMapSecret79EFB23D": {
+   "Type": "AWS::SecretsManager::Secret",
+   "Properties": {
+    "Description": "JSON map of read API key → tenant_id (\"*\" = admin) for AI Audit Ledger",
+    "Name": "ai-audit-ledger/read-key-map",
+    "SecretString": "{\"cac291b4b7b290d57bc72286eba557207f78d37ed84804c5\":\"*\"}"
+   },
+   "UpdateReplacePolicy": "Retain",
+   "DeletionPolicy": "Retain",
+   "Metadata": {
+    "aws:cdk:path": "AiAuditLedgerStack/ReadKeyMapSecret/Resource"
+   }
+  },
+  "RateLimitTableFAD921A1": {
+   "Type": "AWS::DynamoDB::Table",
+   "Properties": {
+    "AttributeDefinitions": [
+     {
+      "AttributeName": "pk",
+      "AttributeType": "S"
+     }
+    ],
+    "BillingMode": "PAY_PER_REQUEST",
+    "KeySchema": [
+     {
+      "AttributeName": "pk",
+      "KeyType": "HASH"
+     }
+    ],
+    "TimeToLiveSpecification": {
+     "AttributeName": "ttl",
+     "Enabled": true
+    }
+   },
+   "UpdateReplacePolicy": "Delete",
+   "DeletionPolicy": "Delete",
+   "Metadata": {
+    "aws:cdk:path": "AiAuditLedgerStack/RateLimitTable/Resource"
+   }
+  },
+  "AuditTableB07F8EEB": {
+   "Type": "AWS::DynamoDB::Table",
+   "Properties": {
+    "AttributeDefinitions": [
+     {
+      "AttributeName": "tenant_id",
+      "AttributeType": "S"
+     },
+     {
+      "AttributeName": "sk",
+      "AttributeType": "S"
+     },
+     {
+      "AttributeName": "event_id",
+      "AttributeType": "S"
+     }
+    ],
+    "BillingMode": "PAY_PER_REQUEST",
+    "GlobalSecondaryIndexes": [
+     {
+      "IndexName": "event_id-index",
+      "KeySchema": [
+       {
+        "AttributeName": "event_id",
+        "KeyType": "HASH"
+       }
+      ],
+      "Projection": {
+       "ProjectionType": "ALL"
+      }
+     }
+    ],
+    "KeySchema": [
+     {
+      "AttributeName": "tenant_id",
+      "KeyType": "HASH"
+     },
+     {
+      "AttributeName": "sk",
+      "KeyType": "RANGE"
+     }
+    ],
+    "PointInTimeRecoverySpecification": {
+     "PointInTimeRecoveryEnabled": true
+    }
+   },
+   "UpdateReplacePolicy": "Retain",
+   "DeletionPolicy": "Retain",
+   "Metadata": {
+    "aws:cdk:path": "AiAuditLedgerStack/AuditTable/Resource"
+   }
+  },
+  "AuditBucketB01E0AE8": {
+   "Type": "AWS::S3::Bucket",
+   "Properties": {
+    "BucketEncryption": {
+     "ServerSideEncryptionConfiguration": [
+      {
+       "ServerSideEncryptionByDefault": {
+        "SSEAlgorithm": "AES256"
+       }
+      }
+     ]
+    },
+    "ObjectLockEnabled": true,
+    "PublicAccessBlockConfiguration": {
+     "BlockPublicAcls": true,
+     "BlockPublicPolicy": true,
+     "IgnorePublicAcls": true,
+     "RestrictPublicBuckets": true
+    },
+    "VersioningConfiguration": {
+     "Status": "Enabled"
+    }
+   },
+   "UpdateReplacePolicy": "Retain",
+   "DeletionPolicy": "Retain",
+   "Metadata": {
+    "aws:cdk:path": "AiAuditLedgerStack/AuditBucket/Resource"
+   }
+  },
+  "IngestDLQA251CA18": {
+   "Type": "AWS::SQS::Queue",
+   "Properties": {
+    "MessageRetentionPeriod": 1209600
+   },
+   "UpdateReplacePolicy": "Delete",
+   "DeletionPolicy": "Delete",
+   "Metadata": {
+    "aws:cdk:path": "AiAuditLedgerStack/IngestDLQ/Resource"
+   }
+  },
+  "IngestQueue2280FF4E": {
+   "Type": "AWS::SQS::Queue",
+   "Properties": {
+    "RedrivePolicy": {
+     "deadLetterTargetArn": {
+      "Fn::GetAtt": [
+       "IngestDLQA251CA18",
+       "Arn"
+      ]
+     },
+     "maxReceiveCount": 5
+    },
+    "VisibilityTimeout": 120
+   },
+   "UpdateReplacePolicy": "Delete",
+   "DeletionPolicy": "Delete",
+   "Metadata": {
+    "aws:cdk:path": "AiAuditLedgerStack/IngestQueue/Resource"
+   }
+  },
+  "IngestFnLogGroup74511E1A": {
+   "Type": "AWS::Logs::LogGroup",
+   "Properties": {
+    "RetentionInDays": 7
+   },
+   "UpdateReplacePolicy": "Retain",
+   "DeletionPolicy": "Retain",
+   "Metadata": {
+    "aws:cdk:path": "AiAuditLedgerStack/IngestFnLogGroup/Resource"
+   }
+  },
+  "IngestFnServiceRoleCDCC94EA": {
+   "Type": "AWS::IAM::Role",
+   "Properties": {
+    "AssumeRolePolicyDocument": {
+     "Statement": [
+      {
+       "Action": "sts:AssumeRole",
+       "Effect": "Allow",
+       "Principal": {
+        "Service": "lambda.amazonaws.com"
+       }
+      }
+     ],
+     "Version": "2012-10-17"
+    },
+    "ManagedPolicyArns": [
+     {
+      "Fn::Join": [
+       "",
+       [
+        "arn:",
+        {
+         "Ref": "AWS::Partition"
+        },
+        ":iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+       ]
+      ]
+     }
+    ]
+   },
+   "Metadata": {
+    "aws:cdk:path": "AiAuditLedgerStack/IngestFn/ServiceRole/Resource"
+   }
+  },
+  "IngestFnServiceRoleDefaultPolicy2D066896": {
+   "Type": "AWS::IAM::Policy",
+   "Properties": {
+    "PolicyDocument": {
+     "Statement": [
+      {
+       "Action": [
+        "sqs:SendMessage",
+        "sqs:GetQueueAttributes",
+        "sqs:GetQueueUrl"
+       ],
+       "Effect": "Allow",
+       "Resource": {
+        "Fn::GetAtt": [
+         "IngestQueue2280FF4E",
+         "Arn"
+        ]
+       }
+      },
+      {
+       "Action": [
+        "secretsmanager:GetSecretValue",
+        "secretsmanager:DescribeSecret"
+       ],
+       "Effect": "Allow",
+       "Resource": {
+        "Ref": "TenantKeyMapSecret550BCED1"
+       }
+      },
+      {
+       "Action": [
+        "dynamodb:BatchGetItem",
+        "dynamodb:Query",
+        "dynamodb:GetItem",
+        "dynamodb:Scan",
+        "dynamodb:ConditionCheckItem",
+        "dynamodb:BatchWriteItem",
+        "dynamodb:PutItem",
+        "dynamodb:UpdateItem",
+        "dynamodb:DeleteItem",
+        "dynamodb:DescribeTable"
+       ],
+       "Effect": "Allow",
+       "Resource": [
+        {
+         "Fn::GetAtt": [
+          "RateLimitTableFAD921A1",
+          "Arn"
+         ]
+        }
+       ]
+      },
+      {
+       "Action": [
+        "dynamodb:GetRecords",
+        "dynamodb:GetShardIterator"
+       ],
+       "Effect": "Allow",
+       "Resource": [
+        {
+         "Fn::GetAtt": [
+          "RateLimitTableFAD921A1",
+          "Arn"
+         ]
+        }
+       ]
+      }
+     ],
+     "Version": "2012-10-17"
+    },
+    "PolicyName": "IngestFnServiceRoleDefaultPolicy2D066896",
+    "Roles": [
+     {
+      "Ref": "IngestFnServiceRoleCDCC94EA"
+     }
+    ]
+   },
+   "Metadata": {
+    "aws:cdk:path": "AiAuditLedgerStack/IngestFn/ServiceRole/DefaultPolicy/Resource"
+   }
+  },
+  "IngestFnEE15D018": {
+   "Type": "AWS::Lambda::Function",
+   "Properties": {
+    "Code": {
+     "S3Bucket": "cdk-hnb659fds-assets-174405733864-eu-west-1",
+     "S3Key": "1e3ed20db2a65613dc129e05f037d4d011a214f7b43aaf238fad2de567c2bf23.zip"
+    },
+    "Environment": {
+     "Variables": {
+      "QUEUE_URL": {
+       "Ref": "IngestQueue2280FF4E"
+      },
+      "TENANT_KEY_SECRET_ARN": {
+       "Ref": "TenantKeyMapSecret550BCED1"
+      },
+      "RATE_LIMIT_TABLE": {
+       "Ref": "RateLimitTableFAD921A1"
+      },
+      "RATE_LIMIT_PER_MINUTE": "100"
+     }
+    },
+    "Handler": "index.handler",
+    "LoggingConfig": {
+     "LogGroup": {
+      "Ref": "IngestFnLogGroup74511E1A"
+     }
+    },
+    "MemorySize": 256,
+    "Role": {
+     "Fn::GetAtt": [
+      "IngestFnServiceRoleCDCC94EA",
+      "Arn"
+     ]
+    },
+    "Runtime": "nodejs20.x",
+    "Timeout": 10
+   },
+   "DependsOn": [
+    "IngestFnServiceRoleDefaultPolicy2D066896",
+    "IngestFnServiceRoleCDCC94EA"
+   ],
+   "Metadata": {
+    "aws:cdk:path": "AiAuditLedgerStack/IngestFn/Resource",
+    "aws:asset:path": "asset.1e3ed20db2a65613dc129e05f037d4d011a214f7b43aaf238fad2de567c2bf23",
+    "aws:asset:is-bundled": true,
+    "aws:asset:property": "Code"
+   }
+  },
+  "ProcessorFnLogGroup3FFD676B": {
+   "Type": "AWS::Logs::LogGroup",
+   "Properties": {
+    "RetentionInDays": 7
+   },
+   "UpdateReplacePolicy": "Retain",
+   "DeletionPolicy": "Retain",
+   "Metadata": {
+    "aws:cdk:path": "AiAuditLedgerStack/ProcessorFnLogGroup/Resource"
+   }
+  },
+  "ProcessorFnServiceRole34FF6C85": {
+   "Type": "AWS::IAM::Role",
+   "Properties": {
+    "AssumeRolePolicyDocument": {
+     "Statement": [
+      {
+       "Action": "sts:AssumeRole",
+       "Effect": "Allow",
+       "Principal": {
+        "Service": "lambda.amazonaws.com"
+       }
+      }
+     ],
+     "Version": "2012-10-17"
+    },
+    "ManagedPolicyArns": [
+     {
+      "Fn::Join": [
+       "",
+       [
+        "arn:",
+        {
+         "Ref": "AWS::Partition"
+        },
+        ":iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+       ]
+      ]
+     }
+    ]
+   },
+   "Metadata": {
+    "aws:cdk:path": "AiAuditLedgerStack/ProcessorFn/ServiceRole/Resource"
+   }
+  },
+  "ProcessorFnServiceRoleDefaultPolicyBCFBAF4F": {
+   "Type": "AWS::IAM::Policy",
+   "Properties": {
+    "PolicyDocument": {
+     "Statement": [
+      {
+       "Action": [
+        "sqs:ReceiveMessage",
+        "sqs:ChangeMessageVisibility",
+        "sqs:GetQueueUrl",
+        "sqs:DeleteMessage",
+        "sqs:GetQueueAttributes"
+       ],
+       "Effect": "Allow",
+       "Resource": {
+        "Fn::GetAtt": [
+         "IngestQueue2280FF4E",
+         "Arn"
+        ]
+       }
+      },
+      {
+       "Action": [
+        "dynamodb:BatchWriteItem",
+        "dynamodb:PutItem",
+        "dynamodb:UpdateItem",
+        "dynamodb:DeleteItem",
+        "dynamodb:DescribeTable"
+       ],
+       "Effect": "Allow",
+       "Resource": [
+        {
+         "Fn::GetAtt": [
+          "AuditTableB07F8EEB",
+          "Arn"
+         ]
+        },
+        {
+         "Fn::Join": [
+          "",
+          [
+           {
+            "Fn::GetAtt": [
+             "AuditTableB07F8EEB",
+             "Arn"
+            ]
+           },
+           "/index/*"
+          ]
+         ]
+        }
+       ]
+      },
+      {
+       "Action": [
+        "s3:PutObject",
+        "s3:PutObjectLegalHold",
+        "s3:PutObjectRetention",
+        "s3:PutObjectTagging",
+        "s3:PutObjectVersionTagging",
+        "s3:Abort*"
+       ],
+       "Effect": "Allow",
+       "Resource": {
+        "Fn::Join": [
+         "",
+         [
+          {
+           "Fn::GetAtt": [
+            "AuditBucketB01E0AE8",
+            "Arn"
+           ]
+          },
+          "/*"
+         ]
+        ]
+       }
+      }
+     ],
+     "Version": "2012-10-17"
+    },
+    "PolicyName": "ProcessorFnServiceRoleDefaultPolicyBCFBAF4F",
+    "Roles": [
+     {
+      "Ref": "ProcessorFnServiceRole34FF6C85"
+     }
+    ]
+   },
+   "Metadata": {
+    "aws:cdk:path": "AiAuditLedgerStack/ProcessorFn/ServiceRole/DefaultPolicy/Resource"
+   }
+  },
+  "ProcessorFn54060268": {
+   "Type": "AWS::Lambda::Function",
+   "Properties": {
+    "Code": {
+     "S3Bucket": "cdk-hnb659fds-assets-174405733864-eu-west-1",
+     "S3Key": "b6b353f1035e0b24eddda238c5047fdb7fa3f4712911ebc52b0ab99cd710b8fc.zip"
+    },
+    "Environment": {
+     "Variables": {
+      "AUDIT_TABLE": {
+       "Ref": "AuditTableB07F8EEB"
+      },
+      "AUDIT_BUCKET": {
+       "Ref": "AuditBucketB01E0AE8"
+      },
+      "RETENTION_YEARS": "7"
+     }
+    },
+    "Handler": "index.handler",
+    "LoggingConfig": {
+     "LogGroup": {
+      "Ref": "ProcessorFnLogGroup3FFD676B"
+     }
+    },
+    "MemorySize": 512,
+    "ReservedConcurrentExecutions": 10,
+    "Role": {
+     "Fn::GetAtt": [
+      "ProcessorFnServiceRole34FF6C85",
+      "Arn"
+     ]
+    },
+    "Runtime": "nodejs20.x",
+    "Timeout": 60
+   },
+   "DependsOn": [
+    "ProcessorFnServiceRoleDefaultPolicyBCFBAF4F",
+    "ProcessorFnServiceRole34FF6C85"
+   ],
+   "Metadata": {
+    "aws:cdk:path": "AiAuditLedgerStack/ProcessorFn/Resource",
+    "aws:asset:path": "asset.b6b353f1035e0b24eddda238c5047fdb7fa3f4712911ebc52b0ab99cd710b8fc",
+    "aws:asset:is-bundled": true,
+    "aws:asset:property": "Code"
+   }
+  },
+  "ProcessorFnSqsEventSourceAiAuditLedgerStackIngestQueue07D9B4C7F10EC19F": {
+   "Type": "AWS::Lambda::EventSourceMapping",
+   "Properties": {
+    "BatchSize": 10,
+    "EventSourceArn": {
+     "Fn::GetAtt": [
+      "IngestQueue2280FF4E",
+      "Arn"
+     ]
+    },
+    "FunctionName": {
+     "Ref": "ProcessorFn54060268"
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "AiAuditLedgerStack/ProcessorFn/SqsEventSource:AiAuditLedgerStackIngestQueue07D9B4C7/Resource"
+   }
+  },
+  "ReadFnLogGroup5AD22E9B": {
+   "Type": "AWS::Logs::LogGroup",
+   "Properties": {
+    "RetentionInDays": 7
+   },
+   "UpdateReplacePolicy": "Retain",
+   "DeletionPolicy": "Retain",
+   "Metadata": {
+    "aws:cdk:path": "AiAuditLedgerStack/ReadFnLogGroup/Resource"
+   }
+  },
+  "ReadFnServiceRoleB6B3A18C": {
+   "Type": "AWS::IAM::Role",
+   "Properties": {
+    "AssumeRolePolicyDocument": {
+     "Statement": [
+      {
+       "Action": "sts:AssumeRole",
+       "Effect": "Allow",
+       "Principal": {
+        "Service": "lambda.amazonaws.com"
+       }
+      }
+     ],
+     "Version": "2012-10-17"
+    },
+    "ManagedPolicyArns": [
+     {
+      "Fn::Join": [
+       "",
+       [
+        "arn:",
+        {
+         "Ref": "AWS::Partition"
+        },
+        ":iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+       ]
+      ]
+     }
+    ]
+   },
+   "Metadata": {
+    "aws:cdk:path": "AiAuditLedgerStack/ReadFn/ServiceRole/Resource"
+   }
+  },
+  "ReadFnServiceRoleDefaultPolicy970B41EC": {
+   "Type": "AWS::IAM::Policy",
+   "Properties": {
+    "PolicyDocument": {
+     "Statement": [
+      {
+       "Action": [
+        "dynamodb:BatchGetItem",
+        "dynamodb:Query",
+        "dynamodb:GetItem",
+        "dynamodb:Scan",
+        "dynamodb:ConditionCheckItem",
+        "dynamodb:DescribeTable"
+       ],
+       "Effect": "Allow",
+       "Resource": [
+        {
+         "Fn::GetAtt": [
+          "AuditTableB07F8EEB",
+          "Arn"
+         ]
+        },
+        {
+         "Fn::Join": [
+          "",
+          [
+           {
+            "Fn::GetAtt": [
+             "AuditTableB07F8EEB",
+             "Arn"
+            ]
+           },
+           "/index/*"
+          ]
+         ]
+        }
+       ]
+      },
+      {
+       "Action": [
+        "dynamodb:GetRecords",
+        "dynamodb:GetShardIterator"
+       ],
+       "Effect": "Allow",
+       "Resource": [
+        {
+         "Fn::GetAtt": [
+          "AuditTableB07F8EEB",
+          "Arn"
+         ]
+        },
+        {
+         "Fn::Join": [
+          "",
+          [
+           {
+            "Fn::GetAtt": [
+             "AuditTableB07F8EEB",
+             "Arn"
+            ]
+           },
+           "/index/*"
+          ]
+         ]
+        }
+       ]
+      },
+      {
+       "Action": [
+        "s3:GetObject*",
+        "s3:GetBucket*",
+        "s3:List*"
+       ],
+       "Effect": "Allow",
+       "Resource": [
+        {
+         "Fn::GetAtt": [
+          "AuditBucketB01E0AE8",
+          "Arn"
+         ]
+        },
+        {
+         "Fn::Join": [
+          "",
+          [
+           {
+            "Fn::GetAtt": [
+             "AuditBucketB01E0AE8",
+             "Arn"
+            ]
+           },
+           "/*"
+          ]
+         ]
+        }
+       ]
+      },
+      {
+       "Action": [
+        "secretsmanager:GetSecretValue",
+        "secretsmanager:DescribeSecret"
+       ],
+       "Effect": "Allow",
+       "Resource": {
+        "Ref": "ReadKeyMapSecret79EFB23D"
+       }
+      }
+     ],
+     "Version": "2012-10-17"
+    },
+    "PolicyName": "ReadFnServiceRoleDefaultPolicy970B41EC",
+    "Roles": [
+     {
+      "Ref": "ReadFnServiceRoleB6B3A18C"
+     }
+    ]
+   },
+   "Metadata": {
+    "aws:cdk:path": "AiAuditLedgerStack/ReadFn/ServiceRole/DefaultPolicy/Resource"
+   }
+  },
+  "ReadFnEBB31BAA": {
+   "Type": "AWS::Lambda::Function",
+   "Properties": {
+    "Code": {
+     "S3Bucket": "cdk-hnb659fds-assets-174405733864-eu-west-1",
+     "S3Key": "f9fbfb7fd2f5ce22bad295f72383a1ffc5678ba6388046201d0b34d266e44fc8.zip"
+    },
+    "Environment": {
+     "Variables": {
+      "AUDIT_TABLE": {
+       "Ref": "AuditTableB07F8EEB"
+      },
+      "AUDIT_BUCKET": {
+       "Ref": "AuditBucketB01E0AE8"
+      },
+      "READ_KEY_SECRET_ARN": {
+       "Ref": "ReadKeyMapSecret79EFB23D"
+      }
+     }
+    },
+    "Handler": "index.handler",
+    "LoggingConfig": {
+     "LogGroup": {
+      "Ref": "ReadFnLogGroup5AD22E9B"
+     }
+    },
+    "MemorySize": 512,
+    "Role": {
+     "Fn::GetAtt": [
+      "ReadFnServiceRoleB6B3A18C",
+      "Arn"
+     ]
+    },
+    "Runtime": "nodejs20.x",
+    "Timeout": 30
+   },
+   "DependsOn": [
+    "ReadFnServiceRoleDefaultPolicy970B41EC",
+    "ReadFnServiceRoleB6B3A18C"
+   ],
+   "Metadata": {
+    "aws:cdk:path": "AiAuditLedgerStack/ReadFn/Resource",
+    "aws:asset:path": "asset.f9fbfb7fd2f5ce22bad295f72383a1ffc5678ba6388046201d0b34d266e44fc8",
+    "aws:asset:is-bundled": true,
+    "aws:asset:property": "Code"
+   }
+  },
+  "AuditApi7B9C3693": {
+   "Type": "AWS::ApiGateway::RestApi",
+   "Properties": {
+    "Description": "AI Audit Ledger ingestion + read API",
+    "Name": "AiAuditLedger"
+   },
+   "Metadata": {
+    "aws:cdk:path": "AiAuditLedgerStack/AuditApi/Resource"
+   }
+  },
+  "AuditApiCloudWatchRoleE24086A9": {
+   "Type": "AWS::IAM::Role",
+   "Properties": {
+    "AssumeRolePolicyDocument": {
+     "Statement": [
+      {
+       "Action": "sts:AssumeRole",
+       "Effect": "Allow",
+       "Principal": {
+        "Service": "apigateway.amazonaws.com"
+       }
+      }
+     ],
+     "Version": "2012-10-17"
+    },
+    "ManagedPolicyArns": [
+     {
+      "Fn::Join": [
+       "",
+       [
+        "arn:",
+        {
+         "Ref": "AWS::Partition"
+        },
+        ":iam::aws:policy/service-role/AmazonAPIGatewayPushToCloudWatchLogs"
+       ]
+      ]
+     }
+    ]
+   },
+   "UpdateReplacePolicy": "Retain",
+   "DeletionPolicy": "Retain",
+   "Metadata": {
+    "aws:cdk:path": "AiAuditLedgerStack/AuditApi/CloudWatchRole/Resource"
+   }
+  },
+  "AuditApiAccountD7F5E9F7": {
+   "Type": "AWS::ApiGateway::Account",
+   "Properties": {
+    "CloudWatchRoleArn": {
+     "Fn::GetAtt": [
+      "AuditApiCloudWatchRoleE24086A9",
+      "Arn"
+     ]
+    }
+   },
+   "DependsOn": [
+    "AuditApi7B9C3693"
+   ],
+   "UpdateReplacePolicy": "Retain",
+   "DeletionPolicy": "Retain",
+   "Metadata": {
+    "aws:cdk:path": "AiAuditLedgerStack/AuditApi/Account"
+   }
+  },
+  "AuditApiDeployment646FF59244eeb137235984df7fc362372a959f12": {
+   "Type": "AWS::ApiGateway::Deployment",
+   "Properties": {
+    "Description": "AI Audit Ledger ingestion + read API",
+    "RestApiId": {
+     "Ref": "AuditApi7B9C3693"
+    }
+   },
+   "DependsOn": [
+    "AuditApiauditeventseventIdhistoryGETF38FF23A",
+    "AuditApiauditeventseventIdhistoryOPTIONS8E872E7D",
+    "AuditApiauditeventseventIdhistoryF836B06F",
+    "AuditApiauditeventseventIdOPTIONS5482F2AC",
+    "AuditApiauditeventseventId114C9247",
+    "AuditApiauditeventsOPTIONSD67DDE33",
+    "AuditApiauditeventsPOSTFBB2908F",
+    "AuditApiauditevents4829B496",
+    "AuditApiauditlogsGET13985BAD",
+    "AuditApiauditlogsOPTIONSCD4CF846",
+    "AuditApiauditlogs836A9483",
+    "AuditApiauditOPTIONS68483980",
+    "AuditApiaudit9FA0E6FE",
+    "AuditApiOPTIONS87C7ED15"
+   ],
+   "Metadata": {
+    "aws:cdk:path": "AiAuditLedgerStack/AuditApi/Deployment/Resource",
+    "aws:cdk:do-not-refactor": true
+   }
+  },
+  "AuditApiDeploymentStageprod4119980F": {
+   "Type": "AWS::ApiGateway::Stage",
+   "Properties": {
+    "DeploymentId": {
+     "Ref": "AuditApiDeployment646FF59244eeb137235984df7fc362372a959f12"
+    },
+    "MethodSettings": [
+     {
+      "DataTraceEnabled": false,
+      "HttpMethod": "*",
+      "LoggingLevel": "ERROR",
+      "MetricsEnabled": true,
+      "ResourcePath": "/*",
+      "ThrottlingBurstLimit": 200,
+      "ThrottlingRateLimit": 100
+     }
+    ],
+    "RestApiId": {
+     "Ref": "AuditApi7B9C3693"
+    },
+    "StageName": "prod"
+   },
+   "DependsOn": [
+    "AuditApiAccountD7F5E9F7"
+   ],
+   "Metadata": {
+    "aws:cdk:path": "AiAuditLedgerStack/AuditApi/DeploymentStage.prod/Resource"
+   }
+  },
+  "AuditApiOPTIONS87C7ED15": {
+   "Type": "AWS::ApiGateway::Method",
+   "Properties": {
+    "ApiKeyRequired": false,
+    "AuthorizationType": "NONE",
+    "HttpMethod": "OPTIONS",
+    "Integration": {
+     "IntegrationResponses": [
+      {
+       "ResponseParameters": {
+        "method.response.header.Access-Control-Allow-Headers": "'Content-Type,X-Api-Key,Authorization'",
+        "method.response.header.Access-Control-Allow-Origin": "'*'",
+        "method.response.header.Access-Control-Allow-Methods": "'OPTIONS,GET,PUT,POST,DELETE,PATCH,HEAD'"
+       },
+       "StatusCode": "204"
+      }
+     ],
+     "RequestTemplates": {
+      "application/json": "{ statusCode: 200 }"
+     },
+     "Type": "MOCK"
+    },
+    "MethodResponses": [
+     {
+      "ResponseParameters": {
+       "method.response.header.Access-Control-Allow-Headers": true,
+       "method.response.header.Access-Control-Allow-Origin": true,
+       "method.response.header.Access-Control-Allow-Methods": true
+      },
+      "StatusCode": "204"
+     }
+    ],
+    "ResourceId": {
+     "Fn::GetAtt": [
+      "AuditApi7B9C3693",
+      "RootResourceId"
+     ]
+    },
+    "RestApiId": {
+     "Ref": "AuditApi7B9C3693"
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "AiAuditLedgerStack/AuditApi/Default/OPTIONS/Resource"
+   }
+  },
+  "AuditApiaudit9FA0E6FE": {
+   "Type": "AWS::ApiGateway::Resource",
+   "Properties": {
+    "ParentId": {
+     "Fn::GetAtt": [
+      "AuditApi7B9C3693",
+      "RootResourceId"
+     ]
+    },
+    "PathPart": "audit",
+    "RestApiId": {
+     "Ref": "AuditApi7B9C3693"
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "AiAuditLedgerStack/AuditApi/Default/audit/Resource"
+   }
+  },
+  "AuditApiauditOPTIONS68483980": {
+   "Type": "AWS::ApiGateway::Method",
+   "Properties": {
+    "ApiKeyRequired": false,
+    "AuthorizationType": "NONE",
+    "HttpMethod": "OPTIONS",
+    "Integration": {
+     "IntegrationResponses": [
+      {
+       "ResponseParameters": {
+        "method.response.header.Access-Control-Allow-Headers": "'Content-Type,X-Api-Key,Authorization'",
+        "method.response.header.Access-Control-Allow-Origin": "'*'",
+        "method.response.header.Access-Control-Allow-Methods": "'OPTIONS,GET,PUT,POST,DELETE,PATCH,HEAD'"
+       },
+       "StatusCode": "204"
+      }
+     ],
+     "RequestTemplates": {
+      "application/json": "{ statusCode: 200 }"
+     },
+     "Type": "MOCK"
+    },
+    "MethodResponses": [
+     {
+      "ResponseParameters": {
+       "method.response.header.Access-Control-Allow-Headers": true,
+       "method.response.header.Access-Control-Allow-Origin": true,
+       "method.response.header.Access-Control-Allow-Methods": true
+      },
+      "StatusCode": "204"
+     }
+    ],
+    "ResourceId": {
+     "Ref": "AuditApiaudit9FA0E6FE"
+    },
+    "RestApiId": {
+     "Ref": "AuditApi7B9C3693"
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "AiAuditLedgerStack/AuditApi/Default/audit/OPTIONS/Resource"
+   }
+  },
+  "AuditApiauditevents4829B496": {
+   "Type": "AWS::ApiGateway::Resource",
+   "Properties": {
+    "ParentId": {
+     "Ref": "AuditApiaudit9FA0E6FE"
+    },
+    "PathPart": "events",
+    "RestApiId": {
+     "Ref": "AuditApi7B9C3693"
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "AiAuditLedgerStack/AuditApi/Default/audit/events/Resource"
+   }
+  },
+  "AuditApiauditeventsOPTIONSD67DDE33": {
+   "Type": "AWS::ApiGateway::Method",
+   "Properties": {
+    "ApiKeyRequired": false,
+    "AuthorizationType": "NONE",
+    "HttpMethod": "OPTIONS",
+    "Integration": {
+     "IntegrationResponses": [
+      {
+       "ResponseParameters": {
+        "method.response.header.Access-Control-Allow-Headers": "'Content-Type,X-Api-Key,Authorization'",
+        "method.response.header.Access-Control-Allow-Origin": "'*'",
+        "method.response.header.Access-Control-Allow-Methods": "'OPTIONS,GET,PUT,POST,DELETE,PATCH,HEAD'"
+       },
+       "StatusCode": "204"
+      }
+     ],
+     "RequestTemplates": {
+      "application/json": "{ statusCode: 200 }"
+     },
+     "Type": "MOCK"
+    },
+    "MethodResponses": [
+     {
+      "ResponseParameters": {
+       "method.response.header.Access-Control-Allow-Headers": true,
+       "method.response.header.Access-Control-Allow-Origin": true,
+       "method.response.header.Access-Control-Allow-Methods": true
+      },
+      "StatusCode": "204"
+     }
+    ],
+    "ResourceId": {
+     "Ref": "AuditApiauditevents4829B496"
+    },
+    "RestApiId": {
+     "Ref": "AuditApi7B9C3693"
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "AiAuditLedgerStack/AuditApi/Default/audit/events/OPTIONS/Resource"
+   }
+  },
+  "AuditApiauditeventsPOSTApiPermissionAiAuditLedgerStackAuditApiBD48682FPOSTauditevents09DC6692": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "IngestFnEE15D018",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-1:174405733864:",
+       {
+        "Ref": "AuditApi7B9C3693"
+       },
+       "/",
+       {
+        "Ref": "AuditApiDeploymentStageprod4119980F"
+       },
+       "/POST/audit/events"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "AiAuditLedgerStack/AuditApi/Default/audit/events/POST/ApiPermission.AiAuditLedgerStackAuditApiBD48682F.POST..audit.events"
+   }
+  },
+  "AuditApiauditeventsPOSTApiPermissionTestAiAuditLedgerStackAuditApiBD48682FPOSTauditevents31FA2A15": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "IngestFnEE15D018",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-1:174405733864:",
+       {
+        "Ref": "AuditApi7B9C3693"
+       },
+       "/test-invoke-stage/POST/audit/events"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "AiAuditLedgerStack/AuditApi/Default/audit/events/POST/ApiPermission.Test.AiAuditLedgerStackAuditApiBD48682F.POST..audit.events"
+   }
+  },
+  "AuditApiauditeventsPOSTFBB2908F": {
+   "Type": "AWS::ApiGateway::Method",
+   "Properties": {
+    "AuthorizationType": "NONE",
+    "HttpMethod": "POST",
+    "Integration": {
+     "IntegrationHttpMethod": "POST",
+     "Type": "AWS_PROXY",
+     "Uri": {
+      "Fn::Join": [
+       "",
+       [
+        "arn:",
+        {
+         "Ref": "AWS::Partition"
+        },
+        ":apigateway:eu-west-1:lambda:path/2015-03-31/functions/",
+        {
+         "Fn::GetAtt": [
+          "IngestFnEE15D018",
+          "Arn"
+         ]
+        },
+        "/invocations"
+       ]
+      ]
+     }
+    },
+    "MethodResponses": [
+     {
+      "StatusCode": "202"
+     }
+    ],
+    "ResourceId": {
+     "Ref": "AuditApiauditevents4829B496"
+    },
+    "RestApiId": {
+     "Ref": "AuditApi7B9C3693"
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "AiAuditLedgerStack/AuditApi/Default/audit/events/POST/Resource"
+   }
+  },
+  "AuditApiauditeventseventId114C9247": {
+   "Type": "AWS::ApiGateway::Resource",
+   "Properties": {
+    "ParentId": {
+     "Ref": "AuditApiauditevents4829B496"
+    },
+    "PathPart": "{eventId}",
+    "RestApiId": {
+     "Ref": "AuditApi7B9C3693"
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "AiAuditLedgerStack/AuditApi/Default/audit/events/{eventId}/Resource"
+   }
+  },
+  "AuditApiauditeventseventIdOPTIONS5482F2AC": {
+   "Type": "AWS::ApiGateway::Method",
+   "Properties": {
+    "ApiKeyRequired": false,
+    "AuthorizationType": "NONE",
+    "HttpMethod": "OPTIONS",
+    "Integration": {
+     "IntegrationResponses": [
+      {
+       "ResponseParameters": {
+        "method.response.header.Access-Control-Allow-Headers": "'Content-Type,X-Api-Key,Authorization'",
+        "method.response.header.Access-Control-Allow-Origin": "'*'",
+        "method.response.header.Access-Control-Allow-Methods": "'OPTIONS,GET,PUT,POST,DELETE,PATCH,HEAD'"
+       },
+       "StatusCode": "204"
+      }
+     ],
+     "RequestTemplates": {
+      "application/json": "{ statusCode: 200 }"
+     },
+     "Type": "MOCK"
+    },
+    "MethodResponses": [
+     {
+      "ResponseParameters": {
+       "method.response.header.Access-Control-Allow-Headers": true,
+       "method.response.header.Access-Control-Allow-Origin": true,
+       "method.response.header.Access-Control-Allow-Methods": true
+      },
+      "StatusCode": "204"
+     }
+    ],
+    "ResourceId": {
+     "Ref": "AuditApiauditeventseventId114C9247"
+    },
+    "RestApiId": {
+     "Ref": "AuditApi7B9C3693"
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "AiAuditLedgerStack/AuditApi/Default/audit/events/{eventId}/OPTIONS/Resource"
+   }
+  },
+  "AuditApiauditeventseventIdhistoryF836B06F": {
+   "Type": "AWS::ApiGateway::Resource",
+   "Properties": {
+    "ParentId": {
+     "Ref": "AuditApiauditeventseventId114C9247"
+    },
+    "PathPart": "history",
+    "RestApiId": {
+     "Ref": "AuditApi7B9C3693"
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "AiAuditLedgerStack/AuditApi/Default/audit/events/{eventId}/history/Resource"
+   }
+  },
+  "AuditApiauditeventseventIdhistoryOPTIONS8E872E7D": {
+   "Type": "AWS::ApiGateway::Method",
+   "Properties": {
+    "ApiKeyRequired": false,
+    "AuthorizationType": "NONE",
+    "HttpMethod": "OPTIONS",
+    "Integration": {
+     "IntegrationResponses": [
+      {
+       "ResponseParameters": {
+        "method.response.header.Access-Control-Allow-Headers": "'Content-Type,X-Api-Key,Authorization'",
+        "method.response.header.Access-Control-Allow-Origin": "'*'",
+        "method.response.header.Access-Control-Allow-Methods": "'OPTIONS,GET,PUT,POST,DELETE,PATCH,HEAD'"
+       },
+       "StatusCode": "204"
+      }
+     ],
+     "RequestTemplates": {
+      "application/json": "{ statusCode: 200 }"
+     },
+     "Type": "MOCK"
+    },
+    "MethodResponses": [
+     {
+      "ResponseParameters": {
+       "method.response.header.Access-Control-Allow-Headers": true,
+       "method.response.header.Access-Control-Allow-Origin": true,
+       "method.response.header.Access-Control-Allow-Methods": true
+      },
+      "StatusCode": "204"
+     }
+    ],
+    "ResourceId": {
+     "Ref": "AuditApiauditeventseventIdhistoryF836B06F"
+    },
+    "RestApiId": {
+     "Ref": "AuditApi7B9C3693"
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "AiAuditLedgerStack/AuditApi/Default/audit/events/{eventId}/history/OPTIONS/Resource"
+   }
+  },
+  "AuditApiauditeventseventIdhistoryGETApiPermissionAiAuditLedgerStackAuditApiBD48682FGETauditeventseventIdhistoryA01270B9": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "ReadFnEBB31BAA",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-1:174405733864:",
+       {
+        "Ref": "AuditApi7B9C3693"
+       },
+       "/",
+       {
+        "Ref": "AuditApiDeploymentStageprod4119980F"
+       },
+       "/GET/audit/events/*/history"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "AiAuditLedgerStack/AuditApi/Default/audit/events/{eventId}/history/GET/ApiPermission.AiAuditLedgerStackAuditApiBD48682F.GET..audit.events.{eventId}.history"
+   }
+  },
+  "AuditApiauditeventseventIdhistoryGETApiPermissionTestAiAuditLedgerStackAuditApiBD48682FGETauditeventseventIdhistoryFA849BC4": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "ReadFnEBB31BAA",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-1:174405733864:",
+       {
+        "Ref": "AuditApi7B9C3693"
+       },
+       "/test-invoke-stage/GET/audit/events/*/history"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "AiAuditLedgerStack/AuditApi/Default/audit/events/{eventId}/history/GET/ApiPermission.Test.AiAuditLedgerStackAuditApiBD48682F.GET..audit.events.{eventId}.history"
+   }
+  },
+  "AuditApiauditeventseventIdhistoryGETF38FF23A": {
+   "Type": "AWS::ApiGateway::Method",
+   "Properties": {
+    "AuthorizationType": "NONE",
+    "HttpMethod": "GET",
+    "Integration": {
+     "IntegrationHttpMethod": "POST",
+     "Type": "AWS_PROXY",
+     "Uri": {
+      "Fn::Join": [
+       "",
+       [
+        "arn:",
+        {
+         "Ref": "AWS::Partition"
+        },
+        ":apigateway:eu-west-1:lambda:path/2015-03-31/functions/",
+        {
+         "Fn::GetAtt": [
+          "ReadFnEBB31BAA",
+          "Arn"
+         ]
+        },
+        "/invocations"
+       ]
+      ]
+     }
+    },
+    "ResourceId": {
+     "Ref": "AuditApiauditeventseventIdhistoryF836B06F"
+    },
+    "RestApiId": {
+     "Ref": "AuditApi7B9C3693"
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "AiAuditLedgerStack/AuditApi/Default/audit/events/{eventId}/history/GET/Resource"
+   }
+  },
+  "AuditApiauditlogs836A9483": {
+   "Type": "AWS::ApiGateway::Resource",
+   "Properties": {
+    "ParentId": {
+     "Ref": "AuditApiaudit9FA0E6FE"
+    },
+    "PathPart": "logs",
+    "RestApiId": {
+     "Ref": "AuditApi7B9C3693"
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "AiAuditLedgerStack/AuditApi/Default/audit/logs/Resource"
+   }
+  },
+  "AuditApiauditlogsOPTIONSCD4CF846": {
+   "Type": "AWS::ApiGateway::Method",
+   "Properties": {
+    "ApiKeyRequired": false,
+    "AuthorizationType": "NONE",
+    "HttpMethod": "OPTIONS",
+    "Integration": {
+     "IntegrationResponses": [
+      {
+       "ResponseParameters": {
+        "method.response.header.Access-Control-Allow-Headers": "'Content-Type,X-Api-Key,Authorization'",
+        "method.response.header.Access-Control-Allow-Origin": "'*'",
+        "method.response.header.Access-Control-Allow-Methods": "'OPTIONS,GET,PUT,POST,DELETE,PATCH,HEAD'"
+       },
+       "StatusCode": "204"
+      }
+     ],
+     "RequestTemplates": {
+      "application/json": "{ statusCode: 200 }"
+     },
+     "Type": "MOCK"
+    },
+    "MethodResponses": [
+     {
+      "ResponseParameters": {
+       "method.response.header.Access-Control-Allow-Headers": true,
+       "method.response.header.Access-Control-Allow-Origin": true,
+       "method.response.header.Access-Control-Allow-Methods": true
+      },
+      "StatusCode": "204"
+     }
+    ],
+    "ResourceId": {
+     "Ref": "AuditApiauditlogs836A9483"
+    },
+    "RestApiId": {
+     "Ref": "AuditApi7B9C3693"
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "AiAuditLedgerStack/AuditApi/Default/audit/logs/OPTIONS/Resource"
+   }
+  },
+  "AuditApiauditlogsGETApiPermissionAiAuditLedgerStackAuditApiBD48682FGETauditlogs116A7E0C": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "ReadFnEBB31BAA",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-1:174405733864:",
+       {
+        "Ref": "AuditApi7B9C3693"
+       },
+       "/",
+       {
+        "Ref": "AuditApiDeploymentStageprod4119980F"
+       },
+       "/GET/audit/logs"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "AiAuditLedgerStack/AuditApi/Default/audit/logs/GET/ApiPermission.AiAuditLedgerStackAuditApiBD48682F.GET..audit.logs"
+   }
+  },
+  "AuditApiauditlogsGETApiPermissionTestAiAuditLedgerStackAuditApiBD48682FGETauditlogs5A5CB1EF": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "ReadFnEBB31BAA",
+      "Arn"
+     ]
+    },
+    "Principal": "apigateway.amazonaws.com",
+    "SourceArn": {
+     "Fn::Join": [
+      "",
+      [
+       "arn:",
+       {
+        "Ref": "AWS::Partition"
+       },
+       ":execute-api:eu-west-1:174405733864:",
+       {
+        "Ref": "AuditApi7B9C3693"
+       },
+       "/test-invoke-stage/GET/audit/logs"
+      ]
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "AiAuditLedgerStack/AuditApi/Default/audit/logs/GET/ApiPermission.Test.AiAuditLedgerStackAuditApiBD48682F.GET..audit.logs"
+   }
+  },
+  "AuditApiauditlogsGET13985BAD": {
+   "Type": "AWS::ApiGateway::Method",
+   "Properties": {
+    "AuthorizationType": "NONE",
+    "HttpMethod": "GET",
+    "Integration": {
+     "IntegrationHttpMethod": "POST",
+     "Type": "AWS_PROXY",
+     "Uri": {
+      "Fn::Join": [
+       "",
+       [
+        "arn:",
+        {
+         "Ref": "AWS::Partition"
+        },
+        ":apigateway:eu-west-1:lambda:path/2015-03-31/functions/",
+        {
+         "Fn::GetAtt": [
+          "ReadFnEBB31BAA",
+          "Arn"
+         ]
+        },
+        "/invocations"
+       ]
+      ]
+     }
+    },
+    "ResourceId": {
+     "Ref": "AuditApiauditlogs836A9483"
+    },
+    "RestApiId": {
+     "Ref": "AuditApi7B9C3693"
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "AiAuditLedgerStack/AuditApi/Default/audit/logs/GET/Resource"
+   }
+  },
+  "CDKMetadata": {
+   "Type": "AWS::CDK::Metadata",
+   "Properties": {
+    "Analytics": "v2:deflate64:H4sIAAAAAAAA/22Qy3LCMAxFv4W9USll0S3Qx6a0NOmeURyRGhI7jWyYjMf/3rETShes7tHD0rXmMF88wmyCZ57K8jitVQE+tyiPAs+880yyI8sNaqyoA5+nWKz3eqAgyl5jY8oC/BcWNcVSgiD4AfzKyePQP9IgK+TY8MPgPx259CpBELWpGPybqV4749pYuHAQNTZFiTttSjowvCd5cVpaZbRQ2IDPzGAh6dbUSvYxHCha2iEzWYZllHEg+PVe/815PpG2uXGdpA22rdJVnHA7u6WuUczK6CCwVRVaOmMPPiO2y1YlJ1dcSmmctuKJ2tr0Del0mH9RbrFK9gfIiNPCeC2xIfttylgc6VIdlyQO4ZpOP4yDRq8fzrbOBhGvBwe+O80XcL+A2eTASk07p61qCLJBfwEC0FbHGAIAAA=="
+   },
+   "Metadata": {
+    "aws:cdk:path": "AiAuditLedgerStack/CDKMetadata/Default"
+   }
+  }
+ },
+ "Outputs": {
+  "AuditApiEndpoint25C1744C": {
+   "Value": {
+    "Fn::Join": [
+     "",
+     [
+      "https://",
+      {
+       "Ref": "AuditApi7B9C3693"
+      },
+      ".execute-api.eu-west-1.",
+      {
+       "Ref": "AWS::URLSuffix"
+      },
+      "/",
+      {
+       "Ref": "AuditApiDeploymentStageprod4119980F"
+      },
+      "/"
+     ]
+    ]
+   }
+  },
+  "ApiBaseUrl": {
+   "Value": {
+    "Fn::Join": [
+     "",
+     [
+      "https://",
+      {
+       "Ref": "AuditApi7B9C3693"
+      },
+      ".execute-api.eu-west-1.",
+      {
+       "Ref": "AWS::URLSuffix"
+      },
+      "/",
+      {
+       "Ref": "AuditApiDeploymentStageprod4119980F"
+      },
+      "/"
+     ]
+    ]
+   }
+  },
+  "IngestUrl": {
+   "Description": "POST ingestion endpoint",
+   "Value": {
+    "Fn::Join": [
+     "",
+     [
+      "https://",
+      {
+       "Ref": "AuditApi7B9C3693"
+      },
+      ".execute-api.eu-west-1.",
+      {
+       "Ref": "AWS::URLSuffix"
+      },
+      "/",
+      {
+       "Ref": "AuditApiDeploymentStageprod4119980F"
+      },
+      "/audit/events"
+     ]
+    ]
+   }
+  },
+  "ReadUrl": {
+   "Description": "GET logs endpoint",
+   "Value": {
+    "Fn::Join": [
+     "",
+     [
+      "https://",
+      {
+       "Ref": "AuditApi7B9C3693"
+      },
+      ".execute-api.eu-west-1.",
+      {
+       "Ref": "AWS::URLSuffix"
+      },
+      "/",
+      {
+       "Ref": "AuditApiDeploymentStageprod4119980F"
+      },
+      "/audit/logs"
+     ]
+    ]
+   }
+  },
+  "TenantKeySecretArn": {
+   "Description": "Secrets Manager ARN for tenant key map — add/remove customers here",
+   "Value": {
+    "Ref": "TenantKeyMapSecret550BCED1"
+   }
+  },
+  "ReadKeySecretArn": {
+   "Description": "Secrets Manager ARN for read key map — manage dashboard access here",
+   "Value": {
+    "Ref": "ReadKeyMapSecret79EFB23D"
+   }
+  },
+  "AuditBucketName": {
+   "Description": "S3 bucket with Object Lock — tamper-evident archive",
+   "Value": {
+    "Ref": "AuditBucketB01E0AE8"
+   }
+  },
+  "AuditTableName": {
+   "Value": {
+    "Ref": "AuditTableB07F8EEB"
+   }
+  },
+  "QueueUrl": {
+   "Value": {
+    "Ref": "IngestQueue2280FF4E"
+   }
+  },
+  "RateLimitTableName": {
+   "Value": {
+    "Ref": "RateLimitTableFAD921A1"
+   }
+  }
+ },
+ "Parameters": {
+  "BootstrapVersion": {
+   "Type": "AWS::SSM::Parameter::Value<String>",
+   "Default": "/cdk-bootstrap/hnb659fds/version",
+   "Description": "Version of the CDK Bootstrap resources in this environment, automatically retrieved from SSM Parameter Store. [cdk:skip]"
+  }
+ },
+ "Rules": {
+  "CheckBootstrapVersion": {
+   "Assertions": [
+    {
+     "Assert": {
+      "Fn::Not": [
+       {
+        "Fn::Contains": [
+         [
+          "1",
+          "2",
+          "3",
+          "4",
+          "5"
+         ],
+         {
+          "Ref": "BootstrapVersion"
+         }
+        ]
+       }
+      ]
+     },
+     "AssertDescription": "CDK bootstrap stack version 6 required. Please run 'cdk bootstrap' with a recent version of the CDK CLI."
+    }
+   ]
+  }
+ }
+}
