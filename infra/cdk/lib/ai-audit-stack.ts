@@ -41,14 +41,12 @@ export class AiAuditLedgerStack extends cdk.Stack {
 
     // ── Secrets Manager ───────────────────────────────────────────────────────
     const tenantKeySecret = new secretsmanager.Secret(this, 'TenantKeyMapSecret', {
-      secretName: 'ai-audit-ledger/tenant-key-map',
       description: 'JSON map of ingest API key → tenant_id for AI Audit Ledger',
       secretStringValue: cdk.SecretValue.unsafePlainText(tenantKeyMapValue),
       removalPolicy: cdk.RemovalPolicy.RETAIN,
     });
 
     const readKeySecret = new secretsmanager.Secret(this, 'ReadKeyMapSecret', {
-      secretName: 'ai-audit-ledger/read-key-map',
       description: 'JSON map of read API key → tenant_id ("*" = admin) for AI Audit Ledger',
       secretStringValue: cdk.SecretValue.unsafePlainText(readKeyMapValue),
       removalPolicy: cdk.RemovalPolicy.RETAIN,

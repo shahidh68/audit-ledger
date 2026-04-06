@@ -5,8 +5,7 @@
    "Type": "AWS::SecretsManager::Secret",
    "Properties": {
     "Description": "JSON map of ingest API key → tenant_id for AI Audit Ledger",
-    "Name": "ai-audit-ledger/tenant-key-map",
-    "SecretString": "{\"demo-tenant-key\":\"demo-tenant\"}"
+    "SecretString": "{\"P+u7J*7=LKpk)qf4Z#busL_nx_gca6p~~gPEHJMe\":\"acme-hr\"}"
    },
    "UpdateReplacePolicy": "Retain",
    "DeletionPolicy": "Retain",
@@ -18,8 +17,7 @@
    "Type": "AWS::SecretsManager::Secret",
    "Properties": {
     "Description": "JSON map of read API key → tenant_id (\"*\" = admin) for AI Audit Ledger",
-    "Name": "ai-audit-ledger/read-key-map",
-    "SecretString": "{\"cac291b4b7b290d57bc72286eba557207f78d37ed84804c5\":\"*\"}"
+    "SecretString": "{\"%+n}=YVC:3+y@pfT_~ZxZ?B4Y1*=\":\"*\"}"
    },
    "UpdateReplacePolicy": "Retain",
    "DeletionPolicy": "Retain",
@@ -502,7 +500,6 @@
      }
     },
     "MemorySize": 512,
-    "ReservedConcurrentExecutions": 10,
     "Role": {
      "Fn::GetAtt": [
       "ProcessorFnServiceRole34FF6C85",
