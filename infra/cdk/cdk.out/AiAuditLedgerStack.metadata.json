@@ -1,4 +1,20 @@
 {
+  "/AiAuditLedgerStack/Custom::S3AutoDeleteObjectsCustomResourceProvider": [
+    {
+      "type": "aws:cdk:is-custom-resource-handler-customResourceProvider",
+      "data": true
+    }
+  ],
+  "/AiAuditLedgerStack/Custom::CDKBucketDeployment8693BB64968944B69AAFB0CC9EB8756C": [
+    {
+      "type": "aws:cdk:is-custom-resource-handler-singleton",
+      "data": true
+    },
+    {
+      "type": "aws:cdk:is-custom-resource-handler-runtime-family",
+      "data": 2
+    }
+  ],
   "/AiAuditLedgerStack/ApiBaseUrl": [
     {
       "type": "aws:cdk:logicalId",
@@ -51,6 +67,12 @@
     {
       "type": "aws:cdk:logicalId",
       "data": "RateLimitTableName"
+    }
+  ],
+  "/AiAuditLedgerStack/DashboardUrl": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "DashboardUrl"
     }
   ],
   "/AiAuditLedgerStack/BootstrapVersion": [
@@ -161,6 +183,42 @@
       "data": "AuditApiEndpoint25C1744C"
     }
   ],
+  "/AiAuditLedgerStack/DashboardBucket/Resource": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "DashboardBucket5758873D"
+    },
+    {
+      "type": "aws:cdk:analytics:mixin",
+      "data": {
+        "mixin": "aws-cdk-lib.aws_s3.mixins.BucketAutoDeleteObjects"
+      }
+    }
+  ],
+  "/AiAuditLedgerStack/Custom::S3AutoDeleteObjectsCustomResourceProvider/Role": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "CustomS3AutoDeleteObjectsCustomResourceProviderRole3B1BD092"
+    }
+  ],
+  "/AiAuditLedgerStack/Custom::S3AutoDeleteObjectsCustomResourceProvider/Handler": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "CustomS3AutoDeleteObjectsCustomResourceProviderHandler9D90184F"
+    }
+  ],
+  "/AiAuditLedgerStack/DashboardDistribution/Resource": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "DashboardDistributionD4569E0E"
+    }
+  ],
+  "/AiAuditLedgerStack/Custom::CDKBucketDeployment8693BB64968944B69AAFB0CC9EB8756C/Resource": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "CustomCDKBucketDeployment8693BB64968944B69AAFB0CC9EB8756C81C01536"
+    }
+  ],
   "/AiAuditLedgerStack/CDKMetadata/Default": [
     {
       "type": "aws:cdk:logicalId",
@@ -209,6 +267,42 @@
       "data": "AuditApiDeploymentStageprod4119980F"
     }
   ],
+  "/AiAuditLedgerStack/DashboardBucket/Policy/Resource": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "DashboardBucketPolicy899268BC"
+    },
+    {
+      "type": "aws:cdk:analytics:mixin",
+      "data": {
+        "mixin": "aws-cdk-lib.aws_s3.mixins.BucketPolicyStatements"
+      }
+    }
+  ],
+  "/AiAuditLedgerStack/DashboardBucket/AutoDeleteObjectsCustomResource/Default": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "DashboardBucketAutoDeleteObjectsCustomResource0A022D13"
+    }
+  ],
+  "/AiAuditLedgerStack/DashboardDeployment/AwsCliLayer/Resource": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "DashboardDeploymentAwsCliLayerFC28C58A"
+    }
+  ],
+  "/AiAuditLedgerStack/DashboardDeployment/CustomResource/Default": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "DashboardDeploymentCustomResourceD8C40087"
+    }
+  ],
+  "/AiAuditLedgerStack/Custom::CDKBucketDeployment8693BB64968944B69AAFB0CC9EB8756C/ServiceRole/Resource": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "CustomCDKBucketDeployment8693BB64968944B69AAFB0CC9EB8756CServiceRole89A01265"
+    }
+  ],
   "/AiAuditLedgerStack/IngestFn/ServiceRole/DefaultPolicy/Resource": [
     {
       "type": "aws:cdk:logicalId",
@@ -237,6 +331,18 @@
     {
       "type": "aws:cdk:logicalId",
       "data": "AuditApiaudit9FA0E6FE"
+    }
+  ],
+  "/AiAuditLedgerStack/DashboardDistribution/Origin1/S3OriginAccessControl/Resource": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "DashboardDistributionOrigin1S3OriginAccessControlBA44AE78"
+    }
+  ],
+  "/AiAuditLedgerStack/Custom::CDKBucketDeployment8693BB64968944B69AAFB0CC9EB8756C/ServiceRole/DefaultPolicy/Resource": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "CustomCDKBucketDeployment8693BB64968944B69AAFB0CC9EB8756CServiceRoleDefaultPolicy88902FDF"
     }
   ],
   "/AiAuditLedgerStack/AuditApi/Default/audit/OPTIONS/Resource": [

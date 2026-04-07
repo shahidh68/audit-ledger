@@ -1,10 +1,13 @@
 import * as cdk from 'aws-cdk-lib';
 import * as apigateway from 'aws-cdk-lib/aws-apigateway';
+import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
+import * as origins from 'aws-cdk-lib/aws-cloudfront-origins';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import { NodejsFunction } from 'aws-cdk-lib/aws-lambda-nodejs';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import * as s3 from 'aws-cdk-lib/aws-s3';
+import { BucketDeployment, Source } from 'aws-cdk-lib/aws-s3-deployment';
 import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
 import { SqsEventSource } from 'aws-cdk-lib/aws-lambda-event-sources';
 import * as sqs from 'aws-cdk-lib/aws-sqs';
@@ -189,6 +192,40 @@ export class AiAuditLedgerStack extends cdk.Stack {
     const history = eventById.addResource('history');
     history.addMethod('GET', new apigateway.LambdaIntegration(readFn));
 
+    // ── Dashboard hosting (S3 + CloudFront) ──────────────────────────────────
+    // The dashboard HTML is served over HTTPS via CloudFront.
+    // Customers open the URL, enter their read key, and connect — no file needed.
+    const dashboardBucket = new s3.Bucket(this, 'DashboardBucket', {
+      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+      encryption: s3.BucketEncryption.S3_MANAGED,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      autoDeleteObjects: true,
+    });
+
+    const dashboardDistribution = new cloudfront.Distribution(this, 'DashboardDistribution', {
+      defaultBehavior: {
+        origin: origins.S3BucketOrigin.withOriginAccessControl(dashboardBucket),
+        viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+        cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED, // always serve latest version
+      },
+      defaultRootObject: 'index.html',
+      errorResponses: [
+        {
+          httpStatus: 403,
+          responseHttpStatus: 200,
+          responsePagePath: '/index.html',
+        },
+      ],
+    });
+
+    // Upload the dashboard folder to S3 and invalidate CloudFront on every deploy
+    new BucketDeployment(this, 'DashboardDeployment', {
+      sources: [Source.asset(join(__dirname, '..', '..', '..', 'dashboard'))],
+      destinationBucket: dashboardBucket,
+      distribution: dashboardDistribution,
+      distributionPaths: ['/*'],
+    });
+
     // ── Outputs ───────────────────────────────────────────────────────────────
     new cdk.CfnOutput(this, 'ApiBaseUrl', { value: api.url });
     new cdk.CfnOutput(this, 'IngestUrl', {
@@ -214,5 +251,9 @@ export class AiAuditLedgerStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'AuditTableName', { value: auditTable.tableName });
     new cdk.CfnOutput(this, 'QueueUrl', { value: queue.queueUrl });
     new cdk.CfnOutput(this, 'RateLimitTableName', { value: rateLimitTable.tableName });
+    new cdk.CfnOutput(this, 'DashboardUrl', {
+      value: `https://${dashboardDistribution.distributionDomainName}`,
+      description: 'Hosted dashboard URL — share this with customers',
+    });
   }
 }
