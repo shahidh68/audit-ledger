@@ -5,7 +5,7 @@
    "Type": "AWS::SecretsManager::Secret",
    "Properties": {
     "Description": "JSON map of ingest API key → tenant_id for AI Audit Ledger",
-    "SecretString": "{\"P+u7J*7=LKpk)qf4Z#busL_nx_gca6p~~gPEHJMe\":\"acme-hr\"}"
+    "SecretString": "{\\\"KI48HEAhsCPygVrxs4F13NL7fpg4VRog\\\":\\\"acme-hr\\\"}"
    },
    "UpdateReplacePolicy": "Retain",
    "DeletionPolicy": "Retain",
@@ -17,7 +17,7 @@
    "Type": "AWS::SecretsManager::Secret",
    "Properties": {
     "Description": "JSON map of read API key → tenant_id (\"*\" = admin) for AI Audit Ledger",
-    "SecretString": "{\"9f4c00e596638d4d5f5c2fb30e2d1917965660358af35367\":\"*\"}"
+    "SecretString": "{\\\"713Dnm3KNiLb28ie58L1QJdwt20Lauvk\\\":\\\"*\\\"}"
    },
    "UpdateReplacePolicy": "Retain",
    "DeletionPolicy": "Retain",
