@@ -5,7 +5,7 @@
    "Type": "AWS::SecretsManager::Secret",
    "Properties": {
     "Description": "JSON map of ingest API key → tenant_id for AI Audit Ledger",
-    "SecretString": "{\\\"KI48HEAhsCPygVrxs4F13NL7fpg4VRog\\\":\\\"acme-hr\\\"}"
+    "SecretString": "{\"YOUR_TENANT_KEY\":\"YOUR_TENANT_ID\"}"
    },
    "UpdateReplacePolicy": "Retain",
    "DeletionPolicy": "Retain",
@@ -17,7 +17,7 @@
    "Type": "AWS::SecretsManager::Secret",
    "Properties": {
     "Description": "JSON map of read API key → tenant_id (\"*\" = admin) for AI Audit Ledger",
-    "SecretString": "{\\\"713Dnm3KNiLb28ie58L1QJdwt20Lauvk\\\":\\\"*\\\"}"
+    "SecretString": "{\"YOUR_READ_KEY\":\"*\"}"
    },
    "UpdateReplacePolicy": "Retain",
    "DeletionPolicy": "Retain",
@@ -162,6 +162,62 @@
    "DeletionPolicy": "Delete",
    "Metadata": {
     "aws:cdk:path": "AiAuditLedgerStack/IngestQueue/Resource"
+   }
+  },
+  "DlqAlarmAA93C9B0": {
+   "Type": "AWS::CloudWatch::Alarm",
+   "Properties": {
+    "AlarmActions": [
+     {
+      "Ref": "DlqAlertTopic4C4252AB"
+     }
+    ],
+    "AlarmDescription": "One or more audit events failed to save after 5 retries. Check CloudWatch Logs for ProcessorFn.",
+    "AlarmName": "AiAuditLedger-DLQ-MessageVisible",
+    "ComparisonOperator": "GreaterThanOrEqualToThreshold",
+    "Dimensions": [
+     {
+      "Name": "QueueName",
+      "Value": {
+       "Fn::GetAtt": [
+        "IngestDLQA251CA18",
+        "QueueName"
+       ]
+      }
+     }
+    ],
+    "EvaluationPeriods": 1,
+    "MetricName": "ApproximateNumberOfMessagesVisible",
+    "Namespace": "AWS/SQS",
+    "Period": 60,
+    "Statistic": "Sum",
+    "Threshold": 1,
+    "TreatMissingData": "notBreaching"
+   },
+   "Metadata": {
+    "aws:cdk:path": "AiAuditLedgerStack/DlqAlarm/Resource"
+   }
+  },
+  "DlqAlertTopic4C4252AB": {
+   "Type": "AWS::SNS::Topic",
+   "Properties": {
+    "DisplayName": "AI Audit Ledger DLQ Alert"
+   },
+   "Metadata": {
+    "aws:cdk:path": "AiAuditLedgerStack/DlqAlertTopic/Resource"
+   }
+  },
+  "DlqAlertTopiccareerinterlaigmailcomBF4B7D4B": {
+   "Type": "AWS::SNS::Subscription",
+   "Properties": {
+    "Endpoint": "careerinterl.ai@gmail.com",
+    "Protocol": "email",
+    "TopicArn": {
+     "Ref": "DlqAlertTopic4C4252AB"
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "AiAuditLedgerStack/DlqAlertTopic/careerinterl.ai@gmail.com/Resource"
    }
   },
   "IngestFnLogGroup74511E1A": {
@@ -2043,7 +2099,7 @@
   "CDKMetadata": {
    "Type": "AWS::CDK::Metadata",
    "Properties": {
-    "Analytics": "v2:deflate64:H4sIAAAAAAAA/3WSwY4TMQyGn2V7TsPS9oC4dbvAhWVLB3FBqEoz7uA2kwyx01JFeXeUzHSnQsvJn+04/u1kJmeLd/L+Tp1pquvj1OBOxoqVPgp1pm0k0B6YWmVVA17Gqvhitbc9JVFfrGpdvZPxm9oZyKkCSdBcxoegj/35gXrzoAgGXDuD+jKe6P0fcdLiH7ST95NbaVkTzWVJkbwtqFgxtGCZJulnEvSbZPwaIBRBBZIwriEZP7vmk3ehy4krJ2FUu6vV1roaDiS/FPMxWM3orEDVyrhx/XTFjqp7ytNuoyICJrnMRtTQGXfJkgahjy+BazsZV3v70uXDCSxXLngNT6rr0Db5/teja/AtEuWyPIa6gP8OvvgV2sYAu/HiKyShOmwUw1ldZNwA8bLDMtKIS61dsCxGsTl641WsmrKHHjZARVt50SfgX67OyYGu2aFJ4SS0caHee2dZxkck9rgLRWg1f/bYYBYBRCtn2TuTa/8Tvi1OaexWHiDrG7b1HLgLLFaB2LWvafontfbuhDX4MtTwM0ze8VadSRuUyzOtDJa1J5H/jDzQm9NsId8u5P3dgRCnPljGFuSmt38B0wu2X2kDAAA="
+    "Analytics": "v2:deflate64:H4sIAAAAAAAA/3VSwW7bMAz9luascF2Sw7Bb6m67tGsWF7sMRSDLjKtEljxRihcI+vdBslMHQ3fiI59EPj5pAYvVJ7i94T3NRX2cK1lBKB0XR8Z72gVCYdFRyzVv0EIoc86KvR5QZPVZ89bUFYRnXilMVAaR0RLCnRfH4fyIhnDHCUe4MUqK83RiyH+FWSv/SD37PLuWljTREjJFcH2hdNxhi9rRLL5ERr8Jwg+PPgvKIDKhjK977sQrhLXitk1cBpGRJgjPppMib5BB6SsSVnZOGp1XvsojU6YhCA+m+WaN7xJ/wZEp3lY132lT44Hgew5fvRa5k+QthK0ZvMpx8mBAybtd4EToCNYpsBo7Zc5pwXHt+7fCZRyEYq/fpnw5oXal8VbgI+86qZvU//3qBm0ricY1H/gZ7U+0OS+lbhQ6MzW+gMh4JxvusOdnCFskt+5kXmmCayGM145NYlP1Kisdb7IPA9giZW35fzyiezV1Ikd0YcchGY+vurdGOwj3kpyVlc9Cy+WTlY1MIpCoMNpZo9Ld/5SvL8c4TcsPkPSNbj1513nHCk/OtO9p+ofaWHOSNdq81PgzVPJ4x3sSSsK6p0LJbHtk6c/AgT6cFiv4uILbmwNJObdeO9kibIf4F1A+6lm3AwAA"
    },
    "Metadata": {
     "aws:cdk:path": "AiAuditLedgerStack/CDKMetadata/Default"
@@ -2189,6 +2245,18 @@
       }
      ]
     ]
+   }
+  },
+  "DlqAlarmName": {
+   "Description": "CloudWatch alarm — fires if any audit record fails to save",
+   "Value": {
+    "Ref": "DlqAlarmAA93C9B0"
+   }
+  },
+  "DlqUrl": {
+   "Description": "Dead-letter queue URL — inspect failed messages here",
+   "Value": {
+    "Ref": "IngestDLQA251CA18"
    }
   }
  },

@@ -75,6 +75,18 @@
       "data": "DashboardUrl"
     }
   ],
+  "/AiAuditLedgerStack/DlqAlarmName": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "DlqAlarmName"
+    }
+  ],
+  "/AiAuditLedgerStack/DlqUrl": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "DlqUrl"
+    }
+  ],
   "/AiAuditLedgerStack/BootstrapVersion": [
     {
       "type": "aws:cdk:logicalId",
@@ -127,6 +139,18 @@
     {
       "type": "aws:cdk:logicalId",
       "data": "IngestQueue2280FF4E"
+    }
+  ],
+  "/AiAuditLedgerStack/DlqAlarm/Resource": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "DlqAlarmAA93C9B0"
+    }
+  ],
+  "/AiAuditLedgerStack/DlqAlertTopic/Resource": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "DlqAlertTopic4C4252AB"
     }
   ],
   "/AiAuditLedgerStack/IngestFnLogGroup/Resource": [
@@ -223,6 +247,12 @@
     {
       "type": "aws:cdk:logicalId",
       "data": "CDKMetadata"
+    }
+  ],
+  "/AiAuditLedgerStack/DlqAlertTopic/careerinterl.ai@gmail.com/Resource": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "DlqAlertTopiccareerinterlaigmailcomBF4B7D4B"
     }
   ],
   "/AiAuditLedgerStack/IngestFn/ServiceRole/Resource": [

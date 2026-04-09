@@ -99,6 +99,29 @@ client.log_event(
 )
 ```
 
+**What each line does:**
+
+`from ai_audit_ledger import AuditClient`
+Load the AI Audit Ledger toolkit into your program. Like plugging in a device before you can use it.
+
+`client = AuditClient(ingest_url=..., api_key=...)`
+Set up the connection once. You tell it two things:
+- **Where to send records** — the web address of your audit system
+- **Your password** — the API key that proves you are allowed to send records
+
+This sits at the top of your code and runs once when your application starts.
+
+`client.log_event(...)`
+The one line your developers add after every AI decision. Four things get recorded:
+
+- **model_version** — which AI model made this decision. `gpt-4o` in this example. In practice this would be whatever model your system uses.
+- **input_data** — the text or data you fed into the AI. In a hiring context this might be a CV. The SDK takes this, turns it into a fingerprint on your computer, and only sends the fingerprint — the actual CV never leaves your system.
+- **decision** — what the AI decided. Here it recommended shortlisting the candidate with a confidence score of 94. This is whatever structured output your AI produces.
+- **human_in_loop** — did a person review this decision before it was acted on? `False` here means the AI's output was used directly.
+
+**The whole thing in one sentence:**
+Your developer writes one line after every AI decision. That line silently logs the record to the audit system in the background in about 50 milliseconds — fast enough that nobody notices, and your compliance evidence is automatically taken care of.
+
 **Node.js**
 
 ```javascript

@@ -207,18 +207,33 @@ The dead-letter queue (DLQ) catches records that failed to save. It should alway
 
 ---
 
+**Step 4 — Check the CloudWatch alarm**
+
+A CloudWatch alarm watches the DLQ automatically and will send you an email if any record ever fails to save. You can check its current state at any time:
+
+1. Go to **AWS Console → CloudWatch** (search for CloudWatch in the top bar)
+2. In the left menu click **Alarms → All alarms**
+3. Find the alarm named **AiAuditLedger-DLQ-MessageVisible**
+4. The **State** column should show **OK** — meaning no failed records
+5. If it shows **In alarm** — records are failing. Go to the Troubleshooting section immediately.
+
+**If you provided an alertEmail during deployment:** You will receive an automatic email any time the alarm fires. You do not need to check manually — the alarm comes to you.
+
+---
+
 ## 6. Monthly checks
 
 Run through this list once a month to keep the system healthy.
 
 | # | Task | Where | What you are looking for |
 |---|---|---|---|
-| 1 | Check DLQ is empty | AWS Console → SQS → IngestDLQ | Messages available = 0 |
-| 2 | Send a test record | Command Prompt (see Section 5) | HTTP 202 response |
-| 3 | Check test record appears | Dashboard | Record visible, integrity verified |
-| 4 | Check for Lambda errors | AWS Console → CloudWatch → Log groups | No ERROR lines in the last 30 days |
-| 5 | Review AWS bill | AWS Console → Billing → Cost Explorer | No unexpected spikes |
-| 6 | Check all customer keys still valid | Secrets Manager → TenantKeyMap | No unexpected entries |
+| 1 | Check DLQ alarm state | AWS Console → CloudWatch → All alarms → AiAuditLedger-DLQ-MessageVisible | State = OK |
+| 2 | Check DLQ is empty | AWS Console → SQS → IngestDLQ | Messages available = 0 |
+| 3 | Send a test record | Command Prompt (see Section 5) | HTTP 202 response |
+| 4 | Check test record appears | Dashboard | Record visible, integrity verified |
+| 5 | Check for Lambda errors | AWS Console → CloudWatch → Log groups | No ERROR lines in the last 30 days |
+| 6 | Review AWS bill | AWS Console → Billing → Cost Explorer | No unexpected spikes |
+| 7 | Check all customer keys still valid | Secrets Manager → TenantKeyMap | No unexpected entries |
 
 **How to check Lambda logs (Step 4):**
 1. Go to **AWS Console → CloudWatch**

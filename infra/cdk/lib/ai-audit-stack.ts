@@ -1,6 +1,8 @@
 import * as cdk from 'aws-cdk-lib';
 import * as apigateway from 'aws-cdk-lib/aws-apigateway';
 import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
+import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
+import * as cw_actions from 'aws-cdk-lib/aws-cloudwatch-actions';
 import * as origins from 'aws-cdk-lib/aws-cloudfront-origins';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
@@ -10,6 +12,8 @@ import * as s3 from 'aws-cdk-lib/aws-s3';
 import { BucketDeployment, Source } from 'aws-cdk-lib/aws-s3-deployment';
 import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
 import { SqsEventSource } from 'aws-cdk-lib/aws-lambda-event-sources';
+import * as sns from 'aws-cdk-lib/aws-sns';
+import * as sns_subscriptions from 'aws-cdk-lib/aws-sns-subscriptions';
 import * as sqs from 'aws-cdk-lib/aws-sqs';
 import { Construct } from 'constructs';
 import { join } from 'path';
@@ -41,6 +45,9 @@ export class AiAuditLedgerStack extends cdk.Stack {
       (this.node.tryGetContext('retentionYears') as string | undefined) ?? '7',
       10,
     );
+
+    // Alert email: if provided, CloudWatch will send an email when records fail to save
+    const alertEmail = this.node.tryGetContext('alertEmail') as string | undefined;
 
     // ── Secrets Manager ───────────────────────────────────────────────────────
     const tenantKeySecret = new secretsmanager.Secret(this, 'TenantKeyMapSecret', {
@@ -102,6 +109,32 @@ export class AiAuditLedgerStack extends cdk.Stack {
       visibilityTimeout: cdk.Duration.seconds(120),
       deadLetterQueue: { queue: dlq, maxReceiveCount: 5 },
     });
+
+    // ── DLQ alarm ─────────────────────────────────────────────────────────────
+    // Fires when any message lands in the dead-letter queue, meaning a record
+    // failed to save to DynamoDB or S3 after 5 retries. This should never happen
+    // in normal operation — treat it as urgent.
+    const dlqAlarm = new cloudwatch.Alarm(this, 'DlqAlarm', {
+      alarmName: 'AiAuditLedger-DLQ-MessageVisible',
+      alarmDescription:
+        'One or more audit events failed to save after 5 retries. Check CloudWatch Logs for ProcessorFn.',
+      metric: dlq.metricApproximateNumberOfMessagesVisible({
+        period: cdk.Duration.minutes(1),
+        statistic: 'Sum',
+      }),
+      threshold: 1,
+      evaluationPeriods: 1,
+      comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+      treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+    });
+
+    if (alertEmail) {
+      const alertTopic = new sns.Topic(this, 'DlqAlertTopic', {
+        displayName: 'AI Audit Ledger DLQ Alert',
+      });
+      alertTopic.addSubscription(new sns_subscriptions.EmailSubscription(alertEmail));
+      dlqAlarm.addAlarmAction(new cw_actions.SnsAction(alertTopic));
+    }
 
     const lambdaDir = join(__dirname, '..', 'lambda');
 
@@ -254,6 +287,14 @@ export class AiAuditLedgerStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'DashboardUrl', {
       value: `https://${dashboardDistribution.distributionDomainName}`,
       description: 'Hosted dashboard URL — share this with customers',
+    });
+    new cdk.CfnOutput(this, 'DlqAlarmName', {
+      value: dlqAlarm.alarmName,
+      description: 'CloudWatch alarm — fires if any audit record fails to save',
+    });
+    new cdk.CfnOutput(this, 'DlqUrl', {
+      value: dlq.queueUrl,
+      description: 'Dead-letter queue URL — inspect failed messages here',
     });
   }
 }
