@@ -5,7 +5,7 @@
    "Type": "AWS::SecretsManager::Secret",
    "Properties": {
     "Description": "JSON map of ingest API key → tenant_id for AI Audit Ledger",
-    "SecretString": "{\"YOUR_TENANT_KEY\":\"YOUR_TENANT_ID\"}"
+    "SecretString": "{\"demo-tenant-key\":\"demo-tenant\"}"
    },
    "UpdateReplacePolicy": "Retain",
    "DeletionPolicy": "Retain",
@@ -17,7 +17,7 @@
    "Type": "AWS::SecretsManager::Secret",
    "Properties": {
     "Description": "JSON map of read API key → tenant_id (\"*\" = admin) for AI Audit Ledger",
-    "SecretString": "{\"YOUR_READ_KEY\":\"*\"}"
+    "SecretString": "{\"c62a5d63c948d11ec34efb2ef303fd5d2ea765bfc2eee786\":\"*\"}"
    },
    "UpdateReplacePolicy": "Retain",
    "DeletionPolicy": "Retain",
@@ -167,11 +167,6 @@
   "DlqAlarmAA93C9B0": {
    "Type": "AWS::CloudWatch::Alarm",
    "Properties": {
-    "AlarmActions": [
-     {
-      "Ref": "DlqAlertTopic4C4252AB"
-     }
-    ],
     "AlarmDescription": "One or more audit events failed to save after 5 retries. Check CloudWatch Logs for ProcessorFn.",
     "AlarmName": "AiAuditLedger-DLQ-MessageVisible",
     "ComparisonOperator": "GreaterThanOrEqualToThreshold",
@@ -196,28 +191,6 @@
    },
    "Metadata": {
     "aws:cdk:path": "AiAuditLedgerStack/DlqAlarm/Resource"
-   }
-  },
-  "DlqAlertTopic4C4252AB": {
-   "Type": "AWS::SNS::Topic",
-   "Properties": {
-    "DisplayName": "AI Audit Ledger DLQ Alert"
-   },
-   "Metadata": {
-    "aws:cdk:path": "AiAuditLedgerStack/DlqAlertTopic/Resource"
-   }
-  },
-  "DlqAlertTopiccareerinterlaigmailcomBF4B7D4B": {
-   "Type": "AWS::SNS::Subscription",
-   "Properties": {
-    "Endpoint": "careerinterl.ai@gmail.com",
-    "Protocol": "email",
-    "TopicArn": {
-     "Ref": "DlqAlertTopic4C4252AB"
-    }
-   },
-   "Metadata": {
-    "aws:cdk:path": "AiAuditLedgerStack/DlqAlertTopic/careerinterl.ai@gmail.com/Resource"
    }
   },
   "IngestFnLogGroup74511E1A": {
@@ -351,7 +324,7 @@
    "Properties": {
     "Code": {
      "S3Bucket": "cdk-hnb659fds-assets-174405733864-eu-west-1",
-     "S3Key": "1e3ed20db2a65613dc129e05f037d4d011a214f7b43aaf238fad2de567c2bf23.zip"
+     "S3Key": "65361584b3cab5711478f8f62b3c34949046d992393c241ea12314b9a1036270.zip"
     },
     "Environment": {
      "Variables": {
@@ -389,7 +362,7 @@
    ],
    "Metadata": {
     "aws:cdk:path": "AiAuditLedgerStack/IngestFn/Resource",
-    "aws:asset:path": "asset.1e3ed20db2a65613dc129e05f037d4d011a214f7b43aaf238fad2de567c2bf23",
+    "aws:asset:path": "asset.65361584b3cab5711478f8f62b3c34949046d992393c241ea12314b9a1036270",
     "aws:asset:is-bundled": true,
     "aws:asset:property": "Code"
    }
@@ -536,7 +509,7 @@
    "Properties": {
     "Code": {
      "S3Bucket": "cdk-hnb659fds-assets-174405733864-eu-west-1",
-     "S3Key": "b6b353f1035e0b24eddda238c5047fdb7fa3f4712911ebc52b0ab99cd710b8fc.zip"
+     "S3Key": "16e48ca91d1cd1ca47b5df5c2817f7d04fe3b03996c540cc790f3342f23bfd32.zip"
     },
     "Environment": {
      "Variables": {
@@ -571,7 +544,7 @@
    ],
    "Metadata": {
     "aws:cdk:path": "AiAuditLedgerStack/ProcessorFn/Resource",
-    "aws:asset:path": "asset.b6b353f1035e0b24eddda238c5047fdb7fa3f4712911ebc52b0ab99cd710b8fc",
+    "aws:asset:path": "asset.16e48ca91d1cd1ca47b5df5c2817f7d04fe3b03996c540cc790f3342f23bfd32",
     "aws:asset:is-bundled": true,
     "aws:asset:property": "Code"
    }
@@ -765,7 +738,7 @@
    "Properties": {
     "Code": {
      "S3Bucket": "cdk-hnb659fds-assets-174405733864-eu-west-1",
-     "S3Key": "f9fbfb7fd2f5ce22bad295f72383a1ffc5678ba6388046201d0b34d266e44fc8.zip"
+     "S3Key": "f17bac33216ee6243f6e69dbff1cb81109f12a5812aa264aee35ca3676e8f942.zip"
     },
     "Environment": {
      "Variables": {
@@ -802,7 +775,7 @@
    ],
    "Metadata": {
     "aws:cdk:path": "AiAuditLedgerStack/ReadFn/Resource",
-    "aws:asset:path": "asset.f9fbfb7fd2f5ce22bad295f72383a1ffc5678ba6388046201d0b34d266e44fc8",
+    "aws:asset:path": "asset.f17bac33216ee6243f6e69dbff1cb81109f12a5812aa264aee35ca3676e8f942",
     "aws:asset:is-bundled": true,
     "aws:asset:property": "Code"
    }
@@ -2099,7 +2072,7 @@
   "CDKMetadata": {
    "Type": "AWS::CDK::Metadata",
    "Properties": {
-    "Analytics": "v2:deflate64:H4sIAAAAAAAA/3VSwW7bMAz9luascF2Sw7Bb6m67tGsWF7sMRSDLjKtEljxRihcI+vdBslMHQ3fiI59EPj5pAYvVJ7i94T3NRX2cK1lBKB0XR8Z72gVCYdFRyzVv0EIoc86KvR5QZPVZ89bUFYRnXilMVAaR0RLCnRfH4fyIhnDHCUe4MUqK83RiyH+FWSv/SD37PLuWljTREjJFcH2hdNxhi9rRLL5ERr8Jwg+PPgvKIDKhjK977sQrhLXitk1cBpGRJgjPppMib5BB6SsSVnZOGp1XvsojU6YhCA+m+WaN7xJ/wZEp3lY132lT44Hgew5fvRa5k+QthK0ZvMpx8mBAybtd4EToCNYpsBo7Zc5pwXHt+7fCZRyEYq/fpnw5oXal8VbgI+86qZvU//3qBm0ricY1H/gZ7U+0OS+lbhQ6MzW+gMh4JxvusOdnCFskt+5kXmmCayGM145NYlP1Kisdb7IPA9giZW35fzyiezV1Ikd0YcchGY+vurdGOwj3kpyVlc9Cy+WTlY1MIpCoMNpZo9Ld/5SvL8c4TcsPkPSNbj1513nHCk/OtO9p+ofaWHOSNdq81PgzVPJ4x3sSSsK6p0LJbHtk6c/AgT6cFiv4uILbmwNJObdeO9kibIf4F1A+6lm3AwAA"
+    "Analytics": "v2:deflate64:H4sIAAAAAAAA/3VSwW7bMAz9luasaF2Sw7Bbmq69rGsWD7sMRcDIjKtEljyRihcI/vdBslMHQ3fiI58ovkdpJmeLT/L2BlqaqvI4NXonY8GgjgJa2kZC5ZGpBgsVehmLnIvV3vaoE+XZQu3KnYw/YGcwURl0guYy3gV17M8PqA93QDjAtTNanccTff4rTmr9R9vJ58m1tKSJ5jJTJK8bCgbGGi3TpHvpBP0mGb8HDFlQBp1QxoWyBVavMi4N+DpxGXTCuIpk/OqqR+9Ck4gL7oSBelfC1roSDyS/5fAQrGLtrNBQy7hxvfMcR0c9SpvYRiBCJrlMQZTYGHdOcgcT92+FyzgZV3v7NuXLCS0XLniFT9A02lbp/vera/S1JkptyQac0f9En/NC28ogu/HiC+gENLoCxhbOMm6QeNnobGmES6VcsCxGsal6lRUMVd5DDzZIWVt+7SfkV1cmckAXdhiS8fBGe+8sy3ivib3ehSy0mD97XekkAolWzrJ3JvX+p3zd3HXjtPwASd+wrefATWCxCsSufk/TP9Tau5Mu0WdTw88wacdbaEkZLZctrYzOa+9E+jPyQB9Os4X8uJC3NwfSeuqDZV2j3PTxL/u/Xj6FAwAA"
    },
    "Metadata": {
     "aws:cdk:path": "AiAuditLedgerStack/CDKMetadata/Default"
