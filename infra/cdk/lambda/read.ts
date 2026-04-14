@@ -12,103 +12,48 @@
  *    and compares it to the DynamoDB copy. Any discrepancy is flagged.
  */
 import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
-import { DynamoDBClient, QueryCommand, ScanCommand } from '@aws-sdk/client-dynamodb';
-import { S3Client, GetObjectCommand, NoSuchKey } from '@aws-sdk/client-s3';
-import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
-import { unmarshall } from '@aws-sdk/util-dynamodb';
+import { createKeyCache } from './lib/secretsCache';
+import { json } from './lib/response';
+import {
+  listTenantEvents,
+  scanAllEvents,
+  findEventById,
+  fetchArchivedRecord,
+} from './lib/auditRepository';
 
-const dynamo  = new DynamoDBClient({});
-const s3      = new S3Client({});
-const secrets = new SecretsManagerClient({});
-
-// ── Secret cache ──────────────────────────────────────────────────────────────
-let cachedReadKeyMap: Map<string, string> | null = null;
-
-async function getReadKeyMap(): Promise<Map<string, string>> {
-  if (cachedReadKeyMap) return cachedReadKeyMap;
-
-  const secretArn = process.env.READ_KEY_SECRET_ARN;
-  if (!secretArn) throw new Error('READ_KEY_SECRET_ARN not set');
-
-  const result = await secrets.send(new GetSecretValueCommand({ SecretId: secretArn }));
-  const raw = result.SecretString ?? '{}';
-
-  const map = new Map<string, string>();
-  try {
-    const parsed = JSON.parse(raw) as Record<string, string>;
-    for (const [k, v] of Object.entries(parsed)) {
-      if (k && v) map.set(k.trim(), v.trim());
-    }
-  } catch {
-    console.error('Failed to parse read key map from Secrets Manager');
-  }
-
-  cachedReadKeyMap = map;
-  return map;
-}
-
-function invalidateReadKeyCache(): void {
-  cachedReadKeyMap = null;
-}
-
-// ── Response helper ───────────────────────────────────────────────────────────
-function json(statusCode: number, body: unknown): APIGatewayProxyResult {
-  return {
-    statusCode,
-    headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
-    body: JSON.stringify(body),
-  };
-}
+const readKeyCache = createKeyCache('READ_KEY_SECRET_ARN');
 
 // ── Handler ───────────────────────────────────────────────────────────────────
 export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
   const tableName  = process.env.AUDIT_TABLE;
   const bucketName = process.env.AUDIT_BUCKET;
-
-  if (!tableName || !bucketName) {
-    return json(500, { error: 'Server misconfiguration' });
-  }
+  if (!tableName || !bucketName) return json(500, { error: 'Server misconfiguration' });
 
   // ── Auth ──────────────────────────────────────────────────────────────────
   const presentedKey = event.headers['x-api-key'] ?? event.headers['X-Api-Key'];
   if (!presentedKey) return json(401, { error: 'Missing read API key' });
 
-  let readKeyMap: Map<string, string>;
+  let callerTenantId: string | null;
   try {
-    readKeyMap = await getReadKeyMap();
+    callerTenantId = await readKeyCache.resolveTenantId(presentedKey);
   } catch (e) {
     console.error('Failed to load read keys', e);
     return json(500, { error: 'Server misconfiguration' });
   }
-
-  let callerTenantId = readKeyMap.get(presentedKey);
-
-  if (!callerTenantId) {
-    invalidateReadKeyCache();
-    try {
-      readKeyMap = await getReadKeyMap();
-      callerTenantId = readKeyMap.get(presentedKey);
-    } catch { /* ignore */ }
-  }
-
   if (!callerTenantId) return json(401, { error: 'Invalid read API key' });
 
-  const isAdmin = callerTenantId === '*';
-  const path    = event.path ?? '';
-  const eventId = event.pathParameters?.eventId;
-  const isHistory = Boolean(eventId) && /\/history\/?$/.test(path);
+  // ── Route ─────────────────────────────────────────────────────────────────
+  const isAdmin   = callerTenantId === '*';
+  const eventId   = event.pathParameters?.eventId;
+  const isHistory = Boolean(eventId) && /\/history\/?$/.test(event.path ?? '');
 
   try {
-    // ── History / tamper-evidence check ────────────────────────────────────
     if (isHistory && eventId) {
       return await handleHistory(eventId, callerTenantId, isAdmin, tableName, bucketName);
     }
-
-    // ── List logs ───────────────────────────────────────────────────────────
     return await handleList(event, callerTenantId, isAdmin, tableName);
-
   } catch (e) {
-    console.error(e);
+    console.error('Query failed', e);
     return json(500, { error: 'Query failed', detail: String(e) });
   }
 }
@@ -123,50 +68,14 @@ async function handleList(
   const from = event.queryStringParameters?.from;
   const to   = event.queryStringParameters?.to;
 
-  let items: Record<string, unknown>[] = [];
+  const rawItems = isAdmin
+    ? await scanAllEvents(tableName, from, to)
+    : await listTenantEvents(tableName, callerTenantId, from, to);
 
-  if (isAdmin) {
-    // Admin: scan all records (add date filter if provided)
-    const result = await dynamo.send(new ScanCommand({
-      TableName: tableName,
-      ...(from && to && {
-        FilterExpression: '#ts >= :from AND #ts <= :to',
-        ExpressionAttributeNames:  { '#ts': 'timestamp' },
-        ExpressionAttributeValues: {
-          ':from': { S: from },
-          ':to':   { S: to },
-        },
-      }),
-    }));
-    items = (result.Items ?? []).map((i) => unmarshall(i));
-
-  } else {
-    // Tenant: query by tenant_id, filter by sk (timestamp#event_id) if date range given
-    const keyCondition = from && to
-      ? 'tenant_id = :tid AND sk BETWEEN :from AND :to'
-      : 'tenant_id = :tid';
-
-    const expressionValues: Record<string, { S: string }> = {
-      ':tid': { S: callerTenantId },
-    };
-    if (from && to) {
-      // Append # and ~ as range bookends so the comparison works against "timestamp#event_id"
-      expressionValues[':from'] = { S: `${from}#` };
-      expressionValues[':to']   = { S: `${to}~` };
-    }
-
-    const result = await dynamo.send(new QueryCommand({
-      TableName: tableName,
-      KeyConditionExpression: keyCondition,
-      ExpressionAttributeValues: expressionValues,
-      ScanIndexForward: false, // newest first
-    }));
-    items = (result.Items ?? []).map((i) => unmarshall(i));
-  }
-
-  // Remove internal sort key from response
-  items.forEach((item) => delete item.sk);
-  items.sort((a, b) => String(b.timestamp ?? '').localeCompare(String(a.timestamp ?? '')));
+  // Remove internal sort key and return newest-first
+  const items = rawItems
+    .map(({ sk: _sk, ...rest }) => rest)
+    .sort((a, b) => String(b.timestamp ?? '').localeCompare(String(a.timestamp ?? '')));
 
   return json(200, {
     items,
@@ -183,47 +92,22 @@ async function handleHistory(
   tableName: string,
   bucketName: string,
 ): Promise<APIGatewayProxyResult> {
-  // Look up the event in DynamoDB via the event_id-index GSI
-  const queryResult = await dynamo.send(new QueryCommand({
-    TableName: tableName,
-    IndexName: 'event_id-index',
-    KeyConditionExpression: 'event_id = :eid',
-    ExpressionAttributeValues: { ':eid': { S: eventId } },
-  }));
-
-  if (!queryResult.Items?.length) {
-    return json(404, { error: 'Event not found' });
-  }
-
-  const dbRecord = unmarshall(queryResult.Items[0]);
+  const rawRecord = await findEventById(tableName, eventId);
+  if (!rawRecord) return json(404, { error: 'Event not found' });
 
   // Enforce tenant scope
-  if (!isAdmin && dbRecord.tenant_id !== callerTenantId) {
+  if (!isAdmin && rawRecord.tenant_id !== callerTenantId) {
     return json(404, { error: 'Event not found' });
   }
 
-  const tenantId = String(dbRecord.tenant_id);
-  delete dbRecord.sk;
+  const tenantId = String(rawRecord.tenant_id);
+  const { sk: _sk, ...dbRecord } = rawRecord;
 
   // Fetch the original record from S3 Object Lock archive
-  let s3Record:         Record<string, unknown> | null = null;
-  let integrityVerified = false;
-  let integrityNote     = '';
+  const { record: s3Record, note: archiveNote } = await fetchArchivedRecord(bucketName, tenantId, eventId);
 
-  try {
-    const s3Result = await s3.send(new GetObjectCommand({
-      Bucket: bucketName,
-      Key:    `${tenantId}/${eventId}.json`,
-    }));
-    const body = await s3Result.Body?.transformToString();
-    s3Record = body ? JSON.parse(body) as Record<string, unknown> : null;
-  } catch (e) {
-    if (e instanceof NoSuchKey) {
-      integrityNote = 'S3 archive record not found — may still be processing.';
-    } else {
-      integrityNote = 'Could not retrieve S3 archive for comparison.';
-    }
-  }
+  let integrityVerified = false;
+  let integrityNote     = archiveNote;
 
   if (s3Record) {
     // Compare the two copies. Serialise both with sorted keys for a stable comparison.
@@ -234,20 +118,17 @@ async function handleHistory(
       );
     };
 
-    const dbJson = JSON.stringify(sortKeys(dbRecord));
-    const s3Json = JSON.stringify(sortKeys(s3Record));
-
-    integrityVerified = dbJson === s3Json;
+    integrityVerified = JSON.stringify(sortKeys(dbRecord)) === JSON.stringify(sortKeys(s3Record));
     integrityNote = integrityVerified
       ? 'Record matches immutable S3 archive. No tampering detected.'
       : 'WARNING: Record does not match S3 archive. Possible tampering — investigate immediately.';
   }
 
   return json(200, {
-    event_id:          eventId,
+    event_id:           eventId,
     integrity_verified: integrityVerified,
-    integrity_note:    integrityNote,
-    current_record:    dbRecord,
-    archived_record:   s3Record,
+    integrity_note:     integrityNote,
+    current_record:     dbRecord,
+    archived_record:    s3Record,
   });
 }

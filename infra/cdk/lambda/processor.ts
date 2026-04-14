@@ -8,17 +8,20 @@
  * is detectable. This replaces QLDB (discontinued July 2025).
  */
 import type { SQSEvent } from 'aws-lambda';
-import { DynamoDBClient, PutItemCommand } from '@aws-sdk/client-dynamodb';
+import { DynamoDBClient, PutItemCommand, ConditionalCheckFailedException } from '@aws-sdk/client-dynamodb';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { marshall } from '@aws-sdk/util-dynamodb';
+import { parseEnvInt, RETENTION_YEARS_DEFAULT } from './lib/config';
 
 const dynamo = new DynamoDBClient({});
 const s3     = new S3Client({});
 
+// Parsed once at module load — env vars are set before the first invocation.
+const retentionYears = parseEnvInt('RETENTION_YEARS', RETENTION_YEARS_DEFAULT);
+
 export async function handler(event: SQSEvent): Promise<void> {
-  const tableName     = process.env.AUDIT_TABLE;
-  const bucketName    = process.env.AUDIT_BUCKET;
-  const retentionYears = parseInt(process.env.RETENTION_YEARS ?? '7', 10);
+  const tableName  = process.env.AUDIT_TABLE;
+  const bucketName = process.env.AUDIT_BUCKET;
 
   if (!tableName || !bucketName) {
     throw new Error('AUDIT_TABLE or AUDIT_BUCKET not set');
@@ -48,8 +51,7 @@ export async function handler(event: SQSEvent): Promise<void> {
       }));
     } catch (e: unknown) {
       // ConditionalCheckFailedException = already written (SQS retry) — safe to skip
-      const name = e instanceof Error ? (e as { name?: string }).name : '';
-      if (name !== 'ConditionalCheckFailedException') throw e;
+      if (!(e instanceof ConditionalCheckFailedException)) throw e;
     }
 
     // ── 2. Write to S3 with Object Lock (WORM) ───────────────────────────────

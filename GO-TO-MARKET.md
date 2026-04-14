@@ -1,5 +1,7 @@
 # AI Audit Ledger — Go-to-market plan
 
+**Beta outreach:** copy-paste invitations for design partners / testers are in [`BETA_TEST_INVITE.md`](./BETA_TEST_INVITE.md).
+
 This document turns the **technical product** into a **market path**: what you can sell now, what to build next, who to talk to first, and how to de-risk the business. It pairs with [INVESTOR-BRIEF.md](./INVESTOR-BRIEF.md) (why it matters) and [LAYMAN-GUIDE.md](./LAYMAN-GUIDE.md) (how it works).
 
 ---
