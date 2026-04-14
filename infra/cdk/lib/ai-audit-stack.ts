@@ -12,8 +12,8 @@ import * as s3 from 'aws-cdk-lib/aws-s3';
 import { BucketDeployment, Source } from 'aws-cdk-lib/aws-s3-deployment';
 import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
 import { SqsEventSource } from 'aws-cdk-lib/aws-lambda-event-sources';
-import * as events from 'aws-cdk-lib/aws-events';
-import * as targets from 'aws-cdk-lib/aws-events-targets';
+import * as eb from 'aws-cdk-lib/aws-events';
+import * as ebTargets from 'aws-cdk-lib/aws-events-targets';
 import * as sns from 'aws-cdk-lib/aws-sns';
 import * as sns_subscriptions from 'aws-cdk-lib/aws-sns-subscriptions';
 import * as sqs from 'aws-cdk-lib/aws-sqs';
@@ -245,12 +245,12 @@ export class AiAuditLedgerStack extends cdk.Stack {
     // ── EventBridge rule — every hour ─────────────────────────────────────────
     // 2 retry attempts so a transient cold-start failure doesn't silently skip
     // a reconciliation window.
-    const reconcilerRule = new events.Rule(this, 'ReconcilerSchedule', {
-      schedule:    events.Schedule.rate(cdk.Duration.hours(1)),
+    const reconcilerRule = new eb.Rule(this, 'ReconcilerSchedule', {
+      schedule:    eb.Schedule.rate(cdk.Duration.hours(1)),
       description: 'Triggers the AI Audit Ledger reconciliation Lambda hourly',
     });
 
-    reconcilerRule.addTarget(new targets.LambdaFunction(reconcilerFn, {
+    reconcilerRule.addTarget(new ebTargets.LambdaFunction(reconcilerFn, {
       retryAttempts: 2,
     }));
 
