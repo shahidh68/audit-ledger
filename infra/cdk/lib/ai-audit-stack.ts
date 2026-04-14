@@ -12,6 +12,8 @@ import * as s3 from 'aws-cdk-lib/aws-s3';
 import { BucketDeployment, Source } from 'aws-cdk-lib/aws-s3-deployment';
 import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
 import { SqsEventSource } from 'aws-cdk-lib/aws-lambda-event-sources';
+import * as eb from 'aws-cdk-lib/aws-events';
+import * as ebTargets from 'aws-cdk-lib/aws-events-targets';
 import * as sns from 'aws-cdk-lib/aws-sns';
 import * as sns_subscriptions from 'aws-cdk-lib/aws-sns-subscriptions';
 import * as sqs from 'aws-cdk-lib/aws-sqs';
@@ -194,6 +196,64 @@ export class AiAuditLedgerStack extends cdk.Stack {
     auditBucket.grantRead(readFn);
     readKeySecret.grantRead(readFn);
 
+    // ── Reconciler state table ────────────────────────────────────────────────
+    // Stores a single item: { pk: "lastRunAt", value: "<ISO timestamp>" }
+    // RETAIN so a cdk destroy doesn't reset the watermark and cause a gap.
+    const reconcilerStateTable = new dynamodb.Table(this, 'ReconcilerStateTable', {
+      partitionKey: { name: 'pk', type: dynamodb.AttributeType.STRING },
+      billingMode:  dynamodb.BillingMode.PAY_PER_REQUEST,
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+    });
+
+    // ── Reconciler SNS topic ──────────────────────────────────────────────────
+    // All mismatches in a run are bundled into one alert (avoids inbox flooding).
+    // Additional subscribers (Slack, PagerDuty) can be added here without code changes.
+    const mismatchTopic = new sns.Topic(this, 'AuditMismatchTopic', {
+      displayName: 'AI Audit Ledger — tamper mismatch alerts',
+    });
+
+    if (alertEmail) {
+      mismatchTopic.addSubscription(new sns_subscriptions.EmailSubscription(alertEmail));
+    }
+
+    // ── Reconciler Lambda ─────────────────────────────────────────────────────
+    const reconcilerFn = new NodejsFunction(this, 'ReconcilerFn', {
+      runtime:    lambda.Runtime.NODEJS_20_X,
+      entry:      join(lambdaDir, 'reconciler.mjs'),
+      handler:    'handler',
+      timeout:    cdk.Duration.minutes(5),
+      memorySize: 512,
+      logGroup: new logs.LogGroup(this, 'ReconcilerFnLogGroup', {
+        retention: logs.RetentionDays.ONE_WEEK,
+      }),
+      environment: {
+        AUDIT_TABLE:            auditTable.tableName,
+        AUDIT_BUCKET:           auditBucket.bucketName,
+        RECONCILER_STATE_TABLE: reconcilerStateTable.tableName,
+        SNS_TOPIC_ARN:          mismatchTopic.topicArn,
+      },
+    });
+
+    // Read-only on audit data — reconciler never modifies audit records.
+    auditTable.grantReadData(reconcilerFn);
+    auditBucket.grantRead(reconcilerFn);
+    // Read + write the watermark only.
+    reconcilerStateTable.grantReadWriteData(reconcilerFn);
+    // Publish mismatch alerts.
+    mismatchTopic.grantPublish(reconcilerFn);
+
+    // ── EventBridge rule — every hour ─────────────────────────────────────────
+    // 2 retry attempts so a transient cold-start failure doesn't silently skip
+    // a reconciliation window.
+    const reconcilerRule = new eb.Rule(this, 'ReconcilerSchedule', {
+      schedule:    eb.Schedule.rate(cdk.Duration.hours(1)),
+      description: 'Triggers the AI Audit Ledger reconciliation Lambda hourly',
+    });
+
+    reconcilerRule.addTarget(new ebTargets.LambdaFunction(reconcilerFn, {
+      retryAttempts: 2,
+    }));
+
     // ── API Gateway with throttling ───────────────────────────────────────────
     const api = new apigateway.RestApi(this, 'AuditApi', {
       restApiName: 'AiAuditLedger',
@@ -295,6 +355,10 @@ export class AiAuditLedgerStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'DlqUrl', {
       value: dlq.queueUrl,
       description: 'Dead-letter queue URL — inspect failed messages here',
+    });
+    new cdk.CfnOutput(this, 'MismatchTopicArn', {
+      value: mismatchTopic.topicArn,
+      description: 'SNS topic ARN for tamper mismatch alerts — add subscribers here',
     });
   }
 }
