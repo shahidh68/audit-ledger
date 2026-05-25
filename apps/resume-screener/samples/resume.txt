@@ -1,0 +1,29 @@
+Jane Smith
+San Francisco, CA
+
+Summary
+Senior software engineer with 8 years of experience designing, shipping, and
+operating high-availability backend systems. Strong hands-on background with
+Python, AWS, Kubernetes, and Terraform. Comfortable owning systems end-to-end
+from design through on-call.
+
+Skills
+Python, AWS, Kubernetes, Terraform, Docker, CI/CD, Linux, PostgreSQL, Redis,
+gRPC, Git, GitHub Actions, Lambda, S3, SQS
+
+Experience
+Acme Corp — Senior Software Engineer (4 years)
+- Owned the migration from EC2 to EKS, cutting infrastructure cost by 38%.
+- Designed and rolled out a multi-region read-replica topology on PostgreSQL.
+- Led on-call rotation for the platform team and mentored 5 junior engineers.
+
+Globex Inc — Software Engineer (3 years)
+- Shipped and operated a payments service handling 1.2M requests per day.
+- Introduced CI/CD pipelines using GitHub Actions across 14 services.
+
+Initech — Junior Engineer (1 year)
+- Built internal tooling in Python on AWS Lambda.
+
+Education
+MSc in Computer Science, Stanford University
+BSc in Computer Science, UC Berkeley

@@ -1,0 +1,1546 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Audit Ledger — Dashboard</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      /* surfaces */
+      --paper:        #faf8f3;
+      --paper-2:      #f3efe7;
+      --ink:          #ffffff;
+      --rule:         #e2dcd0;
+      --rule-strong:  #c9c1b1;
+
+      /* text */
+      --ink-1:        #15181a;
+      --ink-2:        #2c3033;
+      --ink-3:        #6a6e72;
+      --ink-4:        #9aa0a4;
+
+      /* accent + semantic */
+      --moss:         #1f4d3a;
+      --moss-2:       #2a6249;
+      --moss-soft:    #e3eee7;
+      --clay:         #a85a2a;
+      --clay-soft:    #f5e7db;
+      --gold:         #b88a3e;
+      --gold-soft:    #f5ecd9;
+
+      /* type */
+      --font-display: 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Source Serif Pro', Georgia, serif;
+      --font-ui:      -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', system-ui, sans-serif;
+      --font-mono:    'JetBrains Mono', 'SF Mono', 'Cascadia Mono', Menlo, Consolas, monospace;
+
+      /* radius */
+      --r-sm: 4px; --r-md: 6px; --r-lg: 10px;
+
+      /* shadow */
+      --shadow-panel: 0 1px 2px rgba(20,24,28,.04), 0 24px 48px -16px rgba(20,24,28,.18);
+
+      /* legacy aliases — keep admin & detail-panel CSS working without rewriting it */
+      --bg:        var(--paper);
+      --surface:   var(--ink);
+      --border:    var(--rule);
+      --accent:    var(--moss);
+      --accent-lt: var(--moss-soft);
+      --danger:    var(--clay);
+      --danger-lt: var(--clay-soft);
+      --text:      var(--ink-1);
+      --muted:     var(--ink-3);
+      --mono:      var(--font-mono);
+    }
+
+    body {
+      font-family: var(--font-ui);
+      font-size: 14px;
+      line-height: 1.5;
+      background: var(--paper);
+      color: var(--ink-2);
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+    }
+
+    /* ── Type utilities ─────────────────────────────────────────────────────── */
+    .t-display { font-family: var(--font-display); font-size: 28px; line-height: 1.1; letter-spacing: -0.01em; color: var(--ink-1); font-weight: 500; }
+    .t-h2      { font-family: var(--font-display); font-size: 18px; line-height: 1.3; letter-spacing: -0.005em; color: var(--ink-1); font-weight: 500; }
+    .t-eyebrow { font-family: var(--font-ui); font-size: 11px; line-height: 1.2; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; }
+    .t-small   { font-size: 12.5px; line-height: 1.45; color: var(--ink-3); }
+    .t-mono    { font-family: var(--font-mono); font-size: 12px; line-height: 1.4; }
+
+    /* ── Icons ──────────────────────────────────────────────────────────────── */
+    .icon { width: 16px; height: 16px; flex-shrink: 0; stroke: currentColor; fill: none; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+    .icon-sm { width: 14px; height: 14px; }
+    .icon-mark { width: 22px; height: 22px; }
+
+    /* ── Buttons ────────────────────────────────────────────────────────────── */
+    .btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 8px 14px; border: 1px solid transparent;
+      border-radius: var(--r-md);
+      font-family: var(--font-ui); font-size: 13px; font-weight: 500;
+      letter-spacing: 0.005em;
+      cursor: pointer; transition: background 0.12s, border-color 0.12s, color 0.12s;
+      background: transparent; color: var(--ink-1);
+    }
+    .btn:disabled { opacity: 0.4; cursor: default; }
+    .btn-primary {
+      background: var(--moss); color: #fff; border-color: var(--moss);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.08);
+    }
+    .btn-primary:hover:not(:disabled) { background: var(--moss-2); border-color: var(--moss-2); }
+    .btn-outline { background: var(--ink); border-color: var(--rule); color: var(--ink-1); }
+    .btn-outline:hover:not(:disabled) { border-color: var(--rule-strong); }
+    .btn-ghost { background: transparent; color: var(--ink-3); padding: 6px 8px; }
+    .btn-ghost:hover:not(:disabled) { color: var(--ink-1); }
+    .btn-danger { background: var(--clay); color: #fff; border-color: var(--clay); }
+    .btn-sm { padding: 5px 10px; font-size: 12.5px; }
+
+    /* ── Inputs ─────────────────────────────────────────────────────────────── */
+    label { display: block; font-size: 12.5px; font-weight: 600; margin-bottom: 6px; color: var(--ink-1); letter-spacing: 0.005em; }
+
+    input[type="text"], input[type="password"], input[type="email"], input[type="url"] {
+      width: 100%; padding: 9px 12px;
+      border: 1px solid var(--rule); border-radius: var(--r-md);
+      font-family: var(--font-ui); font-size: 14px;
+      background: var(--ink); color: var(--ink-1);
+      transition: border-color 0.12s, box-shadow 0.12s;
+    }
+    input[type="text"]:focus, input[type="password"]:focus, input[type="email"]:focus, input[type="url"]:focus {
+      outline: none; border-color: var(--moss);
+      box-shadow: 0 0 0 3px rgba(31,77,58,.12);
+    }
+
+    /* ── Config screen ──────────────────────────────────────────────────────── */
+    #config-screen { display: flex; min-height: 100vh; }
+    .cfg-left {
+      flex: 1.05; display: flex; align-items: center; justify-content: flex-end;
+      padding: 64px 56px; background: var(--paper);
+    }
+    .cfg-form-wrap { width: 100%; max-width: 380px; }
+    .cfg-mark { color: var(--moss); margin-bottom: 24px; display: inline-flex; }
+    .cfg-form-wrap h1 { margin-bottom: 6px; }
+    .cfg-tag { display: block; margin-bottom: 32px; color: var(--ink-3); font-size: 13px; }
+    .cfg-form-wrap label { margin-top: 18px; }
+    .cfg-form-wrap label:first-of-type { margin-top: 0; }
+    .cfg-hint { font-size: 12px; color: var(--ink-3); margin-top: 6px; }
+    .cfg-error {
+      display: none; margin-top: 18px; padding: 10px 12px;
+      background: var(--clay-soft); color: var(--clay);
+      border: 1px solid #e8c8a8; border-radius: var(--r-md);
+      font-size: 12.5px;
+    }
+    .cfg-submit { margin-top: 24px; width: 100%; justify-content: center; padding: 11px 14px; }
+
+    .cfg-right {
+      flex: 0.95; display: flex; align-items: center;
+      padding: 64px 56px; background: var(--paper-2);
+      border-left: 1px solid var(--rule);
+    }
+    .cfg-right-inner { max-width: 360px; }
+    .cfg-right-eyebrow { margin-bottom: 14px; }
+    .cfg-right-lede {
+      font-family: var(--font-display); font-size: 22px; line-height: 1.35;
+      color: var(--ink-1); letter-spacing: -0.005em; margin-bottom: 28px;
+    }
+    .cfg-feats { list-style: none; padding: 0; margin: 0; }
+    .cfg-feats li { display: flex; gap: 12px; padding: 14px 0; border-top: 1px solid var(--rule); }
+    .cfg-feats li:last-child { border-bottom: 1px solid var(--rule); }
+    .cfg-feat-icon { color: var(--moss); margin-top: 2px; }
+    .cfg-feat-title { font-weight: 600; color: var(--ink-1); font-size: 13.5px; }
+    .cfg-feat-body  { color: var(--ink-3); font-size: 12.5px; margin-top: 2px; }
+
+    @media (max-width: 880px) {
+      #config-screen { flex-direction: column; }
+      .cfg-left, .cfg-right { padding: 40px 28px; flex: 1; justify-content: flex-start; }
+      .cfg-right { border-left: none; border-top: 1px solid var(--rule); }
+    }
+
+    /* ── App shell + header ─────────────────────────────────────────────────── */
+    #app { display: none; }
+
+    header {
+      background: var(--paper);
+      border-bottom: 1px solid var(--rule);
+      padding: 0 32px;
+      display: flex; align-items: stretch; gap: 0;
+      min-height: 64px;
+    }
+    .brand {
+      display: flex; align-items: center; gap: 12px;
+      padding: 16px 0; flex: 1;
+    }
+    .brand-mark { color: var(--moss); }
+    .brand-name { font-family: var(--font-display); font-size: 18px; letter-spacing: -0.005em; color: var(--ink-1); font-weight: 500; }
+
+    .tenant-chip {
+      display: inline-flex; align-items: center; gap: 7px;
+      margin-left: 8px;
+      padding: 4px 10px 4px 8px;
+      border: 1px solid var(--rule); border-radius: 100px;
+      font-family: var(--font-mono); font-size: 11.5px;
+      color: var(--ink-2); background: var(--ink);
+    }
+    .tenant-chip-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--moss); flex-shrink: 0; }
+    .tenant-chip.is-admin .tenant-chip-dot { background: var(--clay); }
+
+    .tab-nav { display: flex; align-items: stretch; gap: 0; }
+    .tab-btn {
+      background: none; border: none;
+      padding: 0 18px; height: 100%;
+      font-family: var(--font-ui); font-size: 11px; font-weight: 600;
+      letter-spacing: 0.1em; text-transform: uppercase;
+      color: var(--ink-3); cursor: pointer;
+      transition: color 0.12s;
+      position: relative;
+      display: inline-flex; align-items: center; gap: 6px;
+    }
+    .tab-btn:hover { color: var(--ink-1); }
+    .tab-btn.active { color: var(--ink-1); }
+    .tab-btn.active::after {
+      content: ""; position: absolute; left: 18px; right: 18px; bottom: -1px;
+      height: 1px; background: var(--ink-1);
+    }
+    .tab-active-dot { display: none; width: 5px; height: 5px; border-radius: 50%; background: var(--moss); }
+    .tab-btn.active .tab-active-dot { display: inline-block; }
+
+    .header-actions { display: flex; align-items: center; padding: 0 0 0 8px; }
+    .header-actions .btn-ghost { font-size: 12.5px; }
+
+    /* ── KPI strip ──────────────────────────────────────────────────────────── */
+    .kpi-strip {
+      background: var(--paper-2);
+      border-bottom: 1px solid var(--rule);
+      display: grid;
+      grid-template-columns: 2fr 1fr 1fr 1fr;
+    }
+    .kpi-cell {
+      padding: 22px 32px;
+      border-right: 1px solid var(--rule);
+      min-height: 124px;
+      display: flex; flex-direction: column; justify-content: space-between;
+    }
+    .kpi-cell:last-child { border-right: none; }
+    .kpi-eyebrow { margin-bottom: 8px; }
+    .kpi-number {
+      font-family: var(--font-display); font-size: 34px; line-height: 1;
+      letter-spacing: -0.015em; color: var(--ink-1); font-weight: 500;
+      font-variant-numeric: tabular-nums;
+    }
+    .kpi-sub { font-size: 11.5px; color: var(--ink-3); margin-top: 4px; }
+    .kpi-spark { margin-top: 14px; height: 32px; }
+    .kpi-spark svg { display: block; width: 100%; height: 100%; overflow: visible; }
+    .kpi-spark .spark-area { fill: var(--moss-soft); }
+    .kpi-spark .spark-line { fill: none; stroke: var(--moss); stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; }
+    .kpi-spark .spark-end  { fill: var(--moss); }
+
+    .kpi-bar {
+      height: 6px; border-radius: 100px; background: var(--rule);
+      overflow: hidden; margin-top: 14px; position: relative;
+    }
+    .kpi-bar-fill { position: absolute; left: 0; top: 0; bottom: 0; background: var(--moss); transition: width 0.4s ease; }
+    .kpi-bar-legend { display: flex; gap: 14px; margin-top: 8px; font-size: 11px; color: var(--ink-3); }
+    .kpi-bar-legend span::before { content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+    .kpi-bar-legend .leg-yes::before { background: var(--moss); }
+    .kpi-bar-legend .leg-no::before  { background: var(--rule-strong); }
+
+    .kpi-dotgrid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 4px; margin-top: 14px; }
+    .kpi-dotgrid .dot { width: 100%; aspect-ratio: 1; border-radius: 50%; background: var(--moss); opacity: 0.85; }
+    .kpi-dotgrid .dot-empty { background: var(--rule); opacity: 1; }
+
+    .kpi-models { margin-top: 12px; display: flex; flex-direction: column; gap: 4px; }
+    .kpi-models-item { font-family: var(--font-mono); font-size: 11px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    @media (max-width: 980px) {
+      .kpi-strip { grid-template-columns: 1fr 1fr; }
+      .kpi-cell:nth-child(2) { border-right: none; }
+      .kpi-cell:nth-child(1), .kpi-cell:nth-child(2) { border-bottom: 1px solid var(--rule); }
+    }
+    @media (max-width: 600px) {
+      .kpi-strip { grid-template-columns: 1fr; }
+      .kpi-cell { border-right: none; border-bottom: 1px solid var(--rule); min-height: auto; }
+      .kpi-cell:last-child { border-bottom: none; }
+    }
+
+    /* ── Toolbar ────────────────────────────────────────────────────────────── */
+    .toolbar {
+      padding: 18px 32px;
+      display: flex; flex-wrap: wrap; gap: 16px; align-items: center;
+      background: var(--paper);
+    }
+    .toolbar label { margin-bottom: 0; font-weight: 500; font-size: 11px; color: var(--ink-3); letter-spacing: 0.08em; text-transform: uppercase; }
+
+    .preset-group {
+      display: inline-flex; border: 1px solid var(--rule); border-radius: var(--r-md);
+      background: var(--ink); overflow: hidden;
+    }
+    .preset-btn {
+      background: transparent; border: none; cursor: pointer;
+      padding: 6px 12px; font-family: var(--font-ui); font-size: 12.5px; font-weight: 500;
+      color: var(--ink-3); border-right: 1px solid var(--rule);
+      transition: background 0.12s, color 0.12s;
+    }
+    .preset-btn:last-child { border-right: none; }
+    .preset-btn:hover { color: var(--ink-1); }
+    .preset-btn.active { background: var(--moss-soft); color: var(--moss); }
+
+    .date-segment {
+      display: inline-flex; align-items: center; gap: 0;
+      border: 1px solid var(--rule); border-radius: var(--r-md);
+      background: var(--ink); overflow: hidden;
+    }
+    .date-segment-cell { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-right: 1px solid var(--rule); }
+    .date-segment-cell:last-child { border-right: none; }
+    .date-segment-cell .icon { color: var(--ink-3); }
+    .date-segment-cell input[type="date"] {
+      border: none; padding: 0; background: transparent;
+      font-family: var(--font-ui); font-size: 12.5px; color: var(--ink-1);
+      width: auto; min-width: 120px;
+    }
+    .date-segment-cell input[type="date"]:focus { outline: none; box-shadow: none; }
+    .date-segment-cell .seg-label { font-size: 10.5px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-3); }
+
+    .spacer { flex: 1; }
+
+    .toolbar .btn .icon { color: var(--ink-3); }
+    .btn.is-loading .icon { animation: spin 0.8s linear infinite; }
+
+    /* ── Error bar ──────────────────────────────────────────────────────────── */
+    #error-bar {
+      display: none; align-items: center; gap: 10px;
+      background: var(--clay-soft); color: var(--clay);
+      padding: 11px 32px; font-size: 13px;
+      border-bottom: 1px solid #e8c8a8;
+    }
+    #error-bar .icon { color: var(--clay); }
+    #error-bar .err-msg { flex: 1; }
+    #error-bar .btn { color: var(--clay); padding: 4px 10px; }
+    #error-bar .btn:hover { background: rgba(168,90,42,.08); }
+
+    /* ── Audit logs table ───────────────────────────────────────────────────── */
+    .table-wrap {
+      padding: 0 32px 32px;
+      overflow-x: auto;
+    }
+    .table-frame {
+      background: var(--ink); border: 1px solid var(--rule);
+      border-radius: var(--r-lg); overflow: hidden;
+    }
+
+    table#log-table {
+      width: 100%; border-collapse: separate; border-spacing: 0;
+      font-size: 13px;
+    }
+    #log-table thead th {
+      text-align: left; padding: 12px 18px;
+      background: var(--paper-2);
+      border-bottom: 1px solid var(--rule-strong);
+      font-family: var(--font-ui); font-size: 10.5px; font-weight: 600;
+      letter-spacing: 0.1em; text-transform: uppercase;
+      color: var(--ink-3);
+      white-space: nowrap;
+    }
+    #log-table tbody tr {
+      cursor: pointer;
+      transition: background 0.1s;
+      position: relative;
+    }
+    #log-table tbody tr td {
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--rule);
+      vertical-align: middle;
+      white-space: nowrap;
+      max-width: 260px; overflow: hidden; text-overflow: ellipsis;
+      background: var(--ink);
+    }
+    #log-table tbody tr:last-child td { border-bottom: none; }
+    #log-table tbody tr:hover td { background: #fdfcf8; }
+    #log-table tbody tr td:first-child { box-shadow: inset 0 0 0 0 var(--moss); transition: box-shadow 0.15s; }
+    #log-table tbody tr:hover td:first-child { box-shadow: inset 2px 0 0 0 var(--moss); }
+
+    .ts-cell { line-height: 1.25; white-space: nowrap; }
+    .ts-date { color: var(--ink-1); font-weight: 500; font-size: 13px; }
+    .ts-time { color: var(--ink-3); font-size: 11.5px; font-variant-numeric: tabular-nums; margin-top: 1px; }
+
+    .id-cell { font-family: var(--font-mono); font-size: 12px; display: inline-flex; align-items: center; gap: 6px; }
+    .id-prefix { color: var(--ink-1); font-weight: 500; }
+    .id-rest { color: var(--ink-4); }
+    .copy-btn {
+      background: none; border: none; cursor: pointer; padding: 2px;
+      color: var(--ink-4); opacity: 0; transition: opacity 0.12s, color 0.12s;
+      display: inline-flex; align-items: center;
+    }
+    #log-table tbody tr:hover .copy-btn { opacity: 1; }
+    .copy-btn:hover { color: var(--ink-1); }
+    .copy-btn.copied { color: var(--moss); opacity: 1; }
+
+    .model-chip {
+      display: inline-block; padding: 2px 8px;
+      font-family: var(--font-mono); font-size: 11.5px;
+      color: var(--ink-2); border: 1px solid var(--rule); border-radius: var(--r-sm);
+      background: var(--paper);
+    }
+
+    .tenant-cell { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink-1); }
+    .tenant-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+
+    /* Human-review stamp */
+    .stamp {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 3px 9px; border-radius: 100px;
+      font-size: 11.5px; font-weight: 600; letter-spacing: 0.005em;
+    }
+    .stamp-yes { background: var(--moss-soft); color: var(--moss); }
+    .stamp-no  { background: transparent; color: var(--ink-3); border: 1px solid var(--rule); }
+    .stamp .icon { width: 12px; height: 12px; stroke-width: 2; }
+
+    /* Skeletons */
+    .skel-row td { padding: 14px 18px; }
+    .skel {
+      display: inline-block; height: 12px; border-radius: 4px;
+      background: linear-gradient(90deg, var(--paper-2) 0%, #ece6d8 50%, var(--paper-2) 100%);
+      background-size: 200% 100%;
+      animation: shimmer 1.4s ease-in-out infinite;
+      vertical-align: middle;
+    }
+    .skel-block { display: block; }
+    @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+    /* Empty state */
+    #empty-state {
+      display: none; text-align: center; padding: 64px 20px 72px;
+      background: var(--ink);
+    }
+    .empty-art { color: var(--ink-4); margin: 0 auto 20px; display: block; }
+    .empty-title { font-family: var(--font-display); font-size: 18px; color: var(--ink-1); margin-bottom: 6px; }
+    .empty-body { font-size: 13px; color: var(--ink-3); }
+
+    #log-table tbody tr.row-enter { animation: rowIn 0.32s ease both; }
+    @keyframes rowIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+    /* Legacy pill — used by admin/contacts only */
+    .pill { display: inline-block; padding: 2px 10px; border-radius: 100px; font-size: 0.75rem; font-weight: 600; }
+    .pill-yes { background: var(--moss-soft); color: var(--moss); }
+    .pill-no  { background: var(--clay-soft); color: var(--clay); }
+
+    /* ── Admin panel (kept) ─────────────────────────────────────────────────── */
+    #admin-view { display: none; }
+
+    .admin-section {
+      max-width: 960px;
+      margin: 32px auto;
+      padding: 0 28px;
+    }
+
+    .admin-section-header {
+      display: flex;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+
+    .admin-section-header h2 {
+      font-size: 1.05rem;
+      font-weight: 700;
+      flex: 1;
+    }
+
+    .admin-section-header p {
+      font-size: 0.85rem;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+
+    .contacts-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.875rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .contacts-table thead th {
+      background: var(--bg);
+      border-bottom: 1px solid var(--border);
+      padding: 10px 16px;
+      text-align: left;
+    }
+
+    .contacts-table tbody tr { border-bottom: 1px solid var(--border); }
+    .contacts-table tbody tr:last-child { border-bottom: none; }
+    .contacts-table td { padding: 12px 16px; vertical-align: middle; }
+
+    .contacts-table .actions { display: flex; gap: 8px; }
+
+    .empty-contacts {
+      text-align: center;
+      padding: 48px 20px;
+      color: var(--muted);
+      font-size: 0.875rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+
+    .form-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 24px;
+      margin-top: 24px;
+    }
+
+    .form-card h3 { font-size: 0.95rem; margin-bottom: 20px; }
+
+    .form-row { margin-bottom: 16px; }
+    .form-row label { margin-bottom: 6px; }
+    .form-row input { margin-bottom: 0; }
+
+    .form-hint {
+      font-size: 0.78rem;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+
+    .form-actions { display: flex; gap: 10px; margin-top: 20px; }
+
+    .form-message {
+      font-size: 0.85rem;
+      padding: 10px 14px;
+      border-radius: 6px;
+      margin-top: 14px;
+      display: none;
+    }
+
+    .form-message.success { background: var(--accent-lt); color: var(--accent); }
+    .form-message.error   { background: var(--danger-lt); color: var(--danger); }
+
+    /* ── Detail panel (kept) ────────────────────────────────────────────────── */
+    #overlay {
+      display: none;
+      position: fixed; inset: 0;
+      background: rgba(20,24,28,0.32);
+      z-index: 100;
+      backdrop-filter: blur(2px);
+    }
+
+    #panel {
+      position: fixed; top: 0; right: 0; bottom: 0;
+      width: 540px; max-width: 100vw;
+      background: var(--surface);
+      border-left: 1px solid var(--border);
+      box-shadow: var(--shadow-panel);
+      z-index: 101;
+      display: flex; flex-direction: column;
+      transform: translateX(100%);
+      transition: transform 0.25s ease;
+    }
+
+    #panel.open { transform: translateX(0); }
+
+    .panel-header {
+      padding: 20px 24px;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 12px;
+    }
+
+    .panel-header h2 { font-family: var(--font-display); font-size: 18px; flex: 1; font-weight: 500; }
+
+    .panel-body { flex: 1; overflow-y: auto; padding: 24px; }
+
+    .section-title {
+      font-size: 0.78rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      margin: 20px 0 10px;
+    }
+    .section-title:first-child { margin-top: 0; }
+
+    .field-row { display: flex; gap: 10px; margin-bottom: 8px; font-size: 0.875rem; }
+    .field-label { color: var(--muted); min-width: 160px; }
+    .field-value { font-family: var(--mono); font-size: 0.8rem; word-break: break-all; }
+
+    .hash-value {
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      color: var(--muted);
+      word-break: break-all;
+    }
+
+    pre.json-block {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px;
+      font-size: 0.78rem;
+      overflow-x: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    #history-loading { color: var(--muted); font-size: 0.875rem; padding: 10px 0; }
+
+    /* ── Spinner (kept) ─────────────────────────────────────────────────────── */
+    .spinner {
+      display: inline-block;
+      width: 14px; height: 14px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+<!-- ── Icon sprite ──────────────────────────────────────────────────────── -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-refresh" viewBox="0 0 16 16">
+      <path d="M14 2v4h-4M2 14v-4h4"/>
+      <path d="M13.5 6.5a6 6 0 0 0-10.5-1M2.5 9.5a6 6 0 0 0 10.5 1"/>
+    </symbol>
+    <symbol id="i-download" viewBox="0 0 16 16">
+      <path d="M8 2v8m0 0 3-3m-3 3L5 7"/>
+      <path d="M2.5 12v1.5A.5.5 0 0 0 3 14h10a.5.5 0 0 0 .5-.5V12"/>
+    </symbol>
+    <symbol id="i-logout" viewBox="0 0 16 16">
+      <path d="M9.5 2.5h-6v11h6"/>
+      <path d="M11 5.5 14 8l-3 2.5M14 8H6"/>
+    </symbol>
+    <symbol id="i-copy" viewBox="0 0 16 16">
+      <rect x="5" y="5" width="9" height="9" rx="1.2"/>
+      <path d="M11 5V3.2A1.2 1.2 0 0 0 9.8 2H3.2A1.2 1.2 0 0 0 2 3.2v6.6A1.2 1.2 0 0 0 3.2 11H5"/>
+    </symbol>
+    <symbol id="i-check" viewBox="0 0 16 16">
+      <path d="m3 8 3.5 3.5L13 5"/>
+    </symbol>
+    <symbol id="i-alert" viewBox="0 0 16 16">
+      <path d="M8 1.5 14.5 13.5h-13L8 1.5z"/>
+      <path d="M8 6.5v3.5M8 12v.5"/>
+    </symbol>
+    <symbol id="i-calendar" viewBox="0 0 16 16">
+      <rect x="2.5" y="3.5" width="11" height="10" rx="1"/>
+      <path d="M2.5 6.5h11M5.5 2v3M10.5 2v3"/>
+    </symbol>
+    <symbol id="i-chevron-r" viewBox="0 0 16 16">
+      <path d="m6 4 4 4-4 4"/>
+    </symbol>
+    <symbol id="i-shield" viewBox="0 0 16 16">
+      <path d="M8 1.5 2.5 4v4.5c0 3 2.5 5 5.5 6 3-1 5.5-3 5.5-6V4L8 1.5z"/>
+      <path d="m6 8 1.5 1.5L10.5 6.5"/>
+    </symbol>
+    <symbol id="i-eye-off" viewBox="0 0 16 16">
+      <path d="M2 2.5 13.5 14M3 6c1.5-2 3-3 5-3 1 0 1.9.25 2.7.7M13 10c.4-.6.7-1.3.7-2 0-1-.4-1.9-1.1-2.7M11 11.3a5 5 0 0 1-3 .7c-3 0-5.5-2-7-4 .8-1 1.7-2 2.8-2.6"/>
+    </symbol>
+    <symbol id="i-stack" viewBox="0 0 80 56" style="overflow:visible">
+      <rect x="14" y="10" width="44" height="34" rx="2"/>
+      <line x1="22" y1="20" x2="50" y2="20"/>
+      <line x1="22" y1="26" x2="46" y2="26"/>
+      <line x1="22" y1="32" x2="44" y2="32"/>
+      <rect x="22" y="16" width="44" height="34" rx="2"/>
+      <line x1="30" y1="26" x2="58" y2="26"/>
+      <line x1="30" y1="32" x2="54" y2="32"/>
+      <line x1="30" y1="38" x2="52" y2="38"/>
+    </symbol>
+    <symbol id="i-mark" viewBox="0 0 22 22">
+      <rect x="3" y="3" width="16" height="16" rx="1.5"/>
+      <line x1="6.5" y1="8" x2="15.5" y2="8"/>
+      <line x1="6.5" y1="11.5" x2="13" y2="11.5"/>
+      <line x1="6.5" y1="15" x2="14" y2="15"/>
+    </symbol>
+  </defs>
+</svg>
+
+<!-- ── Config screen ─────────────────────────────────────────────────────── -->
+<div id="config-screen">
+  <div class="cfg-left">
+    <div class="cfg-form-wrap">
+      <span class="cfg-mark"><svg class="icon-mark" aria-hidden="true"><use href="#i-mark"/></svg></span>
+      <h1 class="t-display">AI Audit Ledger</h1>
+      <span class="cfg-tag">Connect to your audit endpoint to review the immutable record.</span>
+
+      <label for="cfg-url">API Base URL</label>
+      <input type="text" id="cfg-url" placeholder="https://xxxxxx.execute-api.eu-west-1.amazonaws.com/prod" aria-describedby="cfg-url-hint" />
+      <div class="cfg-hint" id="cfg-url-hint">The HTTPS endpoint for your deployed audit ledger.</div>
+
+      <label for="cfg-key" style="margin-top:18px">Read API Key</label>
+      <input type="password" id="cfg-key" placeholder="your-read-key" aria-describedby="cfg-key-hint" />
+      <div class="cfg-hint" id="cfg-key-hint">Stored only in this browser's local storage.</div>
+
+      <div id="cfg-error" class="cfg-error"></div>
+
+      <button class="btn btn-primary cfg-submit" onclick="connect()">
+        Connect
+        <svg class="icon icon-sm" aria-hidden="true"><use href="#i-chevron-r"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <div class="cfg-right">
+    <div class="cfg-right-inner">
+      <div class="t-eyebrow cfg-right-eyebrow">What you're connecting to</div>
+      <p class="cfg-right-lede">A read-only window into a tamper-evident record of every AI decision your system has made.</p>
+      <ul class="cfg-feats">
+        <li>
+          <span class="cfg-feat-icon"><svg class="icon" aria-hidden="true"><use href="#i-eye-off"/></svg></span>
+          <div>
+            <div class="cfg-feat-title">Privacy-preserving by design</div>
+            <div class="cfg-feat-body">Inputs and prompts are stored as cryptographic hashes — no PII traverses this view.</div>
+          </div>
+        </li>
+        <li>
+          <span class="cfg-feat-icon"><svg class="icon" aria-hidden="true"><use href="#i-shield"/></svg></span>
+          <div>
+            <div class="cfg-feat-title">Tamper-evident archive</div>
+            <div class="cfg-feat-body">Every event is mirrored to immutable object storage with an integrity check on read.</div>
+          </div>
+        </li>
+        <li>
+          <span class="cfg-feat-icon"><svg class="icon" aria-hidden="true"><use href="#i-download"/></svg></span>
+          <div>
+            <div class="cfg-feat-title">Built for audit</div>
+            <div class="cfg-feat-body">Filter by date, inspect any event, export to CSV. No telemetry leaves your browser.</div>
+          </div>
+        </li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ── App ───────────────────────────────────────────────────────────────── -->
+<div id="app">
+  <header>
+    <div class="brand">
+      <span class="brand-mark"><svg class="icon-mark" aria-hidden="true"><use href="#i-mark"/></svg></span>
+      <span class="brand-name">AI Audit Ledger</span>
+      <span class="tenant-chip" id="tenant-chip">
+        <span class="tenant-chip-dot"></span>
+        <span id="tenant-chip-text">admin</span>
+      </span>
+    </div>
+
+    <nav class="tab-nav" id="tab-nav">
+      <button class="tab-btn active" onclick="showTab('logs')" id="tab-logs">
+        <span class="tab-active-dot" aria-hidden="true"></span>Audit Logs
+      </button>
+      <button class="tab-btn" onclick="showTab('admin')" id="tab-admin" style="display:none">
+        <span class="tab-active-dot" aria-hidden="true"></span>Admin
+      </button>
+    </nav>
+
+    <div class="header-actions">
+      <button class="btn btn-ghost" onclick="disconnect()">
+        <svg class="icon icon-sm" aria-hidden="true"><use href="#i-logout"/></svg>
+        Disconnect
+      </button>
+    </div>
+  </header>
+
+  <!-- Audit Logs view -->
+  <div id="logs-view">
+
+    <!-- KPI strip -->
+    <div class="kpi-strip" id="kpi-strip">
+      <div class="kpi-cell">
+        <div>
+          <div class="t-eyebrow kpi-eyebrow">Events</div>
+          <div class="kpi-number" id="kpi-events">—</div>
+          <div class="kpi-sub" id="kpi-events-sub">in selected range</div>
+        </div>
+        <div class="kpi-spark" id="kpi-spark"></div>
+      </div>
+
+      <div class="kpi-cell">
+        <div>
+          <div class="t-eyebrow kpi-eyebrow">Human review</div>
+          <div class="kpi-number" id="kpi-review">—</div>
+          <div class="kpi-bar"><div class="kpi-bar-fill" id="kpi-review-fill" style="width:0%"></div></div>
+        </div>
+        <div class="kpi-bar-legend">
+          <span class="leg-yes" id="kpi-review-yes">— reviewed</span>
+          <span class="leg-no"  id="kpi-review-no">— passed through</span>
+        </div>
+      </div>
+
+      <div class="kpi-cell">
+        <div>
+          <div class="t-eyebrow kpi-eyebrow">Tenants</div>
+          <div class="kpi-number" id="kpi-tenants">—</div>
+          <div class="kpi-sub" id="kpi-tenants-sub">distinct in range</div>
+        </div>
+        <div class="kpi-dotgrid" id="kpi-tenants-grid"></div>
+      </div>
+
+      <div class="kpi-cell">
+        <div>
+          <div class="t-eyebrow kpi-eyebrow">Models</div>
+          <div class="kpi-number" id="kpi-models">—</div>
+          <div class="kpi-sub">distinct versions</div>
+        </div>
+        <div class="kpi-models" id="kpi-models-list"></div>
+      </div>
+    </div>
+
+    <!-- Toolbar -->
+    <div class="toolbar">
+      <div class="preset-group" id="preset-group">
+        <button class="preset-btn" data-days="7"  onclick="applyPreset(7)">7d</button>
+        <button class="preset-btn active" data-days="30" onclick="applyPreset(30)">30d</button>
+        <button class="preset-btn" data-days="90" onclick="applyPreset(90)">90d</button>
+      </div>
+
+      <div class="date-segment">
+        <div class="date-segment-cell">
+          <svg class="icon icon-sm" aria-hidden="true"><use href="#i-calendar"/></svg>
+          <span class="seg-label">From</span>
+          <input type="date" id="filter-from" onchange="onDateChange()" />
+        </div>
+        <div class="date-segment-cell">
+          <span class="seg-label">To</span>
+          <input type="date" id="filter-to" onchange="onDateChange()" />
+        </div>
+      </div>
+
+      <div class="spacer"></div>
+
+      <button class="btn btn-outline btn-sm" onclick="loadLogs()" id="refresh-btn">
+        <svg class="icon icon-sm" aria-hidden="true"><use href="#i-refresh"/></svg>
+        Refresh
+      </button>
+      <button class="btn btn-outline btn-sm" onclick="exportCsv()">
+        <svg class="icon icon-sm" aria-hidden="true"><use href="#i-download"/></svg>
+        Export CSV
+      </button>
+    </div>
+
+    <div id="error-bar">
+      <svg class="icon" aria-hidden="true"><use href="#i-alert"/></svg>
+      <span class="err-msg"></span>
+      <button class="btn btn-sm" onclick="loadLogs()">Retry</button>
+    </div>
+
+    <div class="table-wrap">
+      <div class="table-frame">
+        <table id="log-table">
+          <thead>
+            <tr>
+              <th>Timestamp</th>
+              <th>Event ID</th>
+              <th>Model</th>
+              <th>Tenant</th>
+              <th>Human review</th>
+            </tr>
+          </thead>
+          <tbody id="log-body"></tbody>
+        </table>
+
+        <div id="empty-state">
+          <svg class="empty-art icon" width="80" height="56" aria-hidden="true"><use href="#i-stack"/></svg>
+          <div class="empty-title">No records in this range</div>
+          <div class="empty-body">Try widening the date filters, or send a test event from your application.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Admin view (unchanged) -->
+  <div id="admin-view">
+    <div class="admin-section">
+
+      <div class="admin-section-header">
+        <div>
+          <h2>Tenant Contacts</h2>
+          <p>Manage email addresses and webhook URLs for tenant notifications.</p>
+        </div>
+        <div style="margin-left:auto">
+          <button class="btn btn-sm btn-outline" onclick="showContactForm()">+ Add tenant</button>
+        </div>
+      </div>
+
+      <div id="contacts-loading" style="color:var(--muted);font-size:0.875rem;padding:20px 0;">
+        <span class="spinner"></span> Loading…
+      </div>
+
+      <div id="contacts-empty" class="empty-contacts" style="display:none">
+        No tenant contacts configured yet.
+        <br><br>
+        <button class="btn btn-sm btn-outline" onclick="showContactForm()">Add first tenant</button>
+      </div>
+
+      <table class="contacts-table" id="contacts-table" style="display:none">
+        <thead>
+          <tr>
+            <th>Tenant ID</th>
+            <th>Email</th>
+            <th>Webhook URL</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="contacts-body"></tbody>
+      </table>
+
+      <div class="form-card" id="contact-form" style="display:none">
+        <h3 id="form-title">Add tenant contact</h3>
+
+        <div class="form-row">
+          <label for="form-tenant-id">Tenant ID</label>
+          <input type="text" id="form-tenant-id" placeholder="acme-corp" />
+          <div class="form-hint">Must match the tenant_id used in audit events.</div>
+        </div>
+
+        <div class="form-row">
+          <label for="form-email">Email address <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
+          <input type="email" id="form-email" placeholder="ops@tenant.com" />
+        </div>
+
+        <div class="form-row">
+          <label for="form-webhook">Webhook URL <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
+          <input type="url" id="form-webhook" placeholder="https://tenant.com/hooks/audit" />
+          <div class="form-hint">Must be HTTPS. Receives a JSON POST with event details.</div>
+        </div>
+
+        <div id="form-message" class="form-message"></div>
+
+        <div class="form-actions">
+          <button class="btn btn-sm btn-primary" onclick="saveContact()" id="form-save-btn" style="width:auto">Save</button>
+          <button class="btn btn-sm btn-outline" onclick="hideContactForm()">Cancel</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ── Detail panel (unchanged) ──────────────────────────────────────────── -->
+<div id="overlay" onclick="closePanel()"></div>
+<div id="panel">
+  <div class="panel-header">
+    <h2>Event detail</h2>
+    <button class="btn btn-ghost btn-sm" onclick="closePanel()">Close</button>
+  </div>
+  <div class="panel-body" id="panel-body"></div>
+</div>
+
+<script>
+  // ── State ──────────────────────────────────────────────────────────────────
+  let API_BASE = '';
+  let API_KEY  = '';
+  let allRows  = [];
+  let isAdmin  = false;
+  let editingTenantId = null;
+
+  // ── Config ─────────────────────────────────────────────────────────────────
+  window.addEventListener('DOMContentLoaded', () => {
+    const saved = loadConfig();
+    if (saved) {
+      API_BASE = saved.url;
+      API_KEY  = saved.key;
+      showApp();
+    }
+  });
+
+  function loadConfig() {
+    try { return JSON.parse(localStorage.getItem('ail_config') || 'null'); }
+    catch { return null; }
+  }
+
+  function saveConfig(url, key) {
+    localStorage.setItem('ail_config', JSON.stringify({ url, key }));
+  }
+
+  async function connect() {
+    const url = document.getElementById('cfg-url').value.trim().replace(/\/$/, '');
+    const key = document.getElementById('cfg-key').value.trim();
+    const err = document.getElementById('cfg-error');
+
+    if (!url || !key) {
+      err.textContent = 'Both fields are required.';
+      err.style.display = 'block';
+      return;
+    }
+
+    err.style.display = 'none';
+
+    try {
+      const r = await fetch(`${url}/audit/logs`, { headers: { 'x-api-key': key } });
+      if (r.status === 401) {
+        err.textContent = 'Invalid API key. Check and try again.';
+        err.style.display = 'block';
+        return;
+      }
+    } catch {
+      err.textContent = 'Could not reach the API. Check the URL and your internet connection.';
+      err.style.display = 'block';
+      return;
+    }
+
+    API_BASE = url;
+    API_KEY  = key;
+    saveConfig(url, key);
+    showApp();
+  }
+
+  function disconnect() {
+    localStorage.removeItem('ail_config');
+    API_BASE = API_KEY = '';
+    allRows  = [];
+    isAdmin  = false;
+    document.getElementById('app').style.display = 'none';
+    document.getElementById('config-screen').style.display = 'flex';
+  }
+
+  // ── App ────────────────────────────────────────────────────────────────────
+  function showApp() {
+    document.getElementById('config-screen').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+
+    applyPreset(30, /* skipReload */ true);
+
+    showTab('logs');
+    loadLogs();
+  }
+
+  // ── Tab switching ──────────────────────────────────────────────────────────
+  function showTab(tab) {
+    document.getElementById('logs-view').style.display  = tab === 'logs'  ? 'block' : 'none';
+    document.getElementById('admin-view').style.display = tab === 'admin' ? 'block' : 'none';
+    document.getElementById('tab-logs').classList.toggle('active',  tab === 'logs');
+    document.getElementById('tab-admin').classList.toggle('active', tab === 'admin');
+
+    if (tab === 'admin') loadTenantContacts();
+  }
+
+  // ── Date presets ───────────────────────────────────────────────────────────
+  function applyPreset(days, skipReload) {
+    const to   = new Date();
+    const from = new Date();
+    from.setDate(from.getDate() - days);
+    document.getElementById('filter-from').value = from.toISOString().slice(0, 10);
+    document.getElementById('filter-to').value   = to.toISOString().slice(0, 10);
+    document.querySelectorAll('.preset-btn').forEach(b => {
+      b.classList.toggle('active', Number(b.dataset.days) === days);
+    });
+    if (!skipReload) loadLogs();
+  }
+
+  function onDateChange() {
+    document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+    loadLogs();
+  }
+
+  // ── Load audit logs ────────────────────────────────────────────────────────
+  async function loadLogs() {
+    showError(null);
+    renderSkeletons();
+    document.getElementById('empty-state').style.display = 'none';
+    document.getElementById('log-table').style.display = 'table';
+
+    const refreshBtn = document.getElementById('refresh-btn');
+    refreshBtn.classList.add('is-loading');
+
+    const from = document.getElementById('filter-from').value;
+    const to   = document.getElementById('filter-to').value;
+    let url = `${API_BASE}/audit/logs`;
+    if (from && to) url += `?from=${encodeURIComponent(from + 'T00:00:00Z')}&to=${encodeURIComponent(to + 'T23:59:59Z')}`;
+
+    try {
+      const r = await fetch(url, { headers: { 'x-api-key': API_KEY } });
+      if (!r.ok) {
+        const body = await r.json().catch(() => ({}));
+        showError(`API error ${r.status}: ${body.error ?? 'Unknown error'}`);
+        document.getElementById('log-body').innerHTML = '';
+        renderKpis([]);
+        return;
+      }
+
+      const data = await r.json();
+      allRows = data.items ?? [];
+
+      isAdmin = !data.tenant_id;
+      const chip = document.getElementById('tenant-chip');
+      const chipText = document.getElementById('tenant-chip-text');
+      if (data.tenant_id) {
+        chipText.textContent = data.tenant_id;
+        chip.classList.remove('is-admin');
+      } else {
+        chipText.textContent = 'admin';
+        chip.classList.add('is-admin');
+      }
+      document.getElementById('tab-admin').style.display = isAdmin ? '' : 'none';
+
+      renderKpis(allRows);
+      renderTable(allRows);
+    } catch {
+      showError('Failed to load logs. Check your connection.');
+      document.getElementById('log-body').innerHTML = '';
+      renderKpis([]);
+    } finally {
+      refreshBtn.classList.remove('is-loading');
+    }
+  }
+
+  // ── Skeleton loader ────────────────────────────────────────────────────────
+  function renderSkeletons() {
+    const tbody = document.getElementById('log-body');
+    const widths = [[60,80],[110,40],[80,55],[70,90],[55,40]];
+    let html = '';
+    for (let r = 0; r < 6; r++) {
+      html += '<tr class="skel-row">';
+      for (let c = 0; c < 5; c++) {
+        const w = widths[c][(r + c) % 2];
+        html += `<td><span class="skel" style="width:${w}px"></span></td>`;
+      }
+      html += '</tr>';
+    }
+    tbody.innerHTML = html;
+  }
+
+  // ── Render table ───────────────────────────────────────────────────────────
+  function renderTable(rows) {
+    const tbody = document.getElementById('log-body');
+    tbody.innerHTML = '';
+
+    if (!rows.length) {
+      document.getElementById('log-table').style.display = 'none';
+      document.getElementById('empty-state').style.display = 'block';
+      return;
+    }
+
+    rows.forEach((row, i) => {
+      const tr = document.createElement('tr');
+      tr.onclick = () => openPanel(row);
+      if (i < 12) tr.classList.add('row-enter');
+      tr.style.animationDelay = `${Math.min(i, 12) * 18}ms`;
+
+      const ts = row.timestamp ? new Date(row.timestamp) : null;
+      const tsDate = ts ? ts.toLocaleDateString('en-GB', { month: 'short', day: 'numeric' }) : '—';
+      const tsTime = ts ? ts.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '';
+
+      const eventId = row.event_id ?? '—';
+      const idPrefix = typeof eventId === 'string' ? eventId.slice(0, 8) : '—';
+      const idRest   = typeof eventId === 'string' && eventId.length > 8 ? eventId.slice(8, 13) + '…' : '';
+
+      const tenant = row.tenant_id ?? '—';
+      const dotColor = tenant === '—' ? 'var(--ink-4)' : `hsl(${tenantHue(tenant)} 42% 48%)`;
+
+      const human = row.human_in_loop;
+
+      tr.innerHTML = `
+        <td>
+          <div class="ts-cell">
+            <div class="ts-date">${esc(tsDate)}</div>
+            ${tsTime ? `<div class="ts-time">${esc(tsTime)}</div>` : ''}
+          </div>
+        </td>
+        <td>
+          <span class="id-cell" title="${esc(eventId)}">
+            <span class="id-prefix">${esc(idPrefix)}</span><span class="id-rest">${esc(idRest)}</span>
+            <button class="copy-btn" data-id="${esc(eventId)}" aria-label="Copy event ID" onclick="event.stopPropagation();copyId(this)">
+              <svg class="icon" style="width:13px;height:13px" aria-hidden="true"><use href="#i-copy"/></svg>
+            </button>
+          </span>
+        </td>
+        <td>${row.model_version ? `<span class="model-chip">${esc(row.model_version)}</span>` : '<span style="color:var(--ink-4)">—</span>'}</td>
+        <td>
+          <span class="tenant-cell">
+            <span class="tenant-dot" style="background:${dotColor}"></span>
+            ${esc(tenant)}
+          </span>
+        </td>
+        <td>
+          ${human
+            ? `<span class="stamp stamp-yes"><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>Reviewed</span>`
+            : `<span class="stamp stamp-no">— passed through</span>`}
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  function copyId(btn) {
+    const id = btn.dataset.id;
+    if (!id) return;
+    try {
+      navigator.clipboard?.writeText(id);
+      btn.classList.add('copied');
+      setTimeout(() => btn.classList.remove('copied'), 900);
+    } catch {}
+  }
+
+  // ── Render KPIs ────────────────────────────────────────────────────────────
+  function renderKpis(rows) {
+    const dash = '—';
+
+    if (!rows.length) {
+      document.getElementById('kpi-events').textContent = dash;
+      document.getElementById('kpi-events-sub').textContent = 'no events in selected range';
+      document.getElementById('kpi-spark').innerHTML = '';
+      document.getElementById('kpi-review').textContent = dash;
+      document.getElementById('kpi-review-fill').style.width = '0%';
+      document.getElementById('kpi-review-yes').textContent = '— reviewed';
+      document.getElementById('kpi-review-no').textContent  = '— passed through';
+      document.getElementById('kpi-tenants').textContent = dash;
+      document.getElementById('kpi-tenants-sub').textContent = 'distinct in range';
+      document.getElementById('kpi-tenants-grid').innerHTML = '';
+      document.getElementById('kpi-models').textContent = dash;
+      document.getElementById('kpi-models-list').innerHTML = '';
+      return;
+    }
+
+    // Events count + sparkline
+    countUp(document.getElementById('kpi-events'), rows.length);
+    document.getElementById('kpi-events-sub').textContent =
+      rows.length === 1 ? 'event in selected range' : 'events in selected range';
+    document.getElementById('kpi-spark').innerHTML = sparkline(buildDailyBuckets(rows));
+
+    // Human review
+    const yes = rows.filter(r => r.human_in_loop).length;
+    const no  = rows.length - yes;
+    const pct = Math.round((yes / rows.length) * 100);
+    document.getElementById('kpi-review').textContent = `${pct}%`;
+    document.getElementById('kpi-review-fill').style.width = `${pct}%`;
+    document.getElementById('kpi-review-yes').textContent = `${yes} reviewed`;
+    document.getElementById('kpi-review-no').textContent  = `${no} passed through`;
+
+    // Tenants
+    const tenants = [...new Set(rows.map(r => r.tenant_id).filter(Boolean))];
+    countUp(document.getElementById('kpi-tenants'), tenants.length);
+    document.getElementById('kpi-tenants-sub').textContent =
+      tenants.length === 1 ? 'tenant in range' : 'distinct tenants in range';
+    renderDotGrid(tenants);
+
+    // Models
+    const models = [...new Set(rows.map(r => r.model_version).filter(Boolean))];
+    countUp(document.getElementById('kpi-models'), models.length);
+    const list = document.getElementById('kpi-models-list');
+    list.innerHTML = models.slice(0, 2).map(m => `<div class="kpi-models-item" title="${esc(m)}">${esc(m)}</div>`).join('');
+  }
+
+  function countUp(el, target) {
+    const start = performance.now();
+    const dur = 380;
+    const ease = t => 1 - Math.pow(1 - t, 3);
+    function frame(now) {
+      const t = Math.min(1, (now - start) / dur);
+      el.textContent = Math.round(target * ease(t)).toLocaleString();
+      if (t < 1) requestAnimationFrame(frame);
+      else el.textContent = target.toLocaleString();
+    }
+    requestAnimationFrame(frame);
+  }
+
+  function buildDailyBuckets(rows) {
+    const from = document.getElementById('filter-from').value;
+    const to   = document.getElementById('filter-to').value;
+    if (!from || !to) return [];
+    const fromD = new Date(from + 'T00:00:00Z');
+    const toD   = new Date(to   + 'T00:00:00Z');
+    const days = Math.max(1, Math.round((toD - fromD) / 86400000) + 1);
+    const buckets = new Array(days).fill(0);
+    rows.forEach(r => {
+      if (!r.timestamp) return;
+      const t = new Date(r.timestamp);
+      const idx = Math.floor((Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate()) - fromD.getTime()) / 86400000);
+      if (idx >= 0 && idx < days) buckets[idx]++;
+    });
+    return buckets;
+  }
+
+  function sparkline(values) {
+    if (!values.length) return '';
+    const w = 200, h = 32, pad = 2;
+    const max = Math.max(1, ...values);
+    const step = values.length > 1 ? (w - pad * 2) / (values.length - 1) : 0;
+    const points = values.map((v, i) => {
+      const x = pad + i * step;
+      const y = h - pad - (v / max) * (h - pad * 2);
+      return [x, y];
+    });
+    const linePath = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join(' ');
+    const areaPath = `${linePath} L${points[points.length - 1][0].toFixed(1)} ${h} L${points[0][0].toFixed(1)} ${h} Z`;
+    const last = points[points.length - 1];
+    return `
+      <svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true">
+        <path class="spark-area" d="${areaPath}"/>
+        <path class="spark-line" d="${linePath}"/>
+        <circle class="spark-end" cx="${last[0].toFixed(1)}" cy="${last[1].toFixed(1)}" r="2"/>
+      </svg>
+    `;
+  }
+
+  function renderDotGrid(tenants) {
+    const grid = document.getElementById('kpi-tenants-grid');
+    const cap = 24;
+    const filled = Math.min(tenants.length, cap);
+    let html = '';
+    for (let i = 0; i < filled; i++) {
+      const hue = tenantHue(tenants[i]);
+      html += `<span class="dot" style="background:hsl(${hue} 42% 48%)" title="${esc(tenants[i])}"></span>`;
+    }
+    for (let i = filled; i < cap; i++) html += `<span class="dot dot-empty"></span>`;
+    grid.innerHTML = html;
+  }
+
+  // Stable hue from tenant id — golden-ratio scatter for visual separation
+  function tenantHue(id) {
+    let h = 0;
+    for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+    return Math.floor(((h % 1000) / 1000) * 360);
+  }
+
+  // ── Admin: Tenant contacts (unchanged) ─────────────────────────────────────
+  async function loadTenantContacts() {
+    document.getElementById('contacts-loading').style.display = 'block';
+    document.getElementById('contacts-empty').style.display   = 'none';
+    document.getElementById('contacts-table').style.display   = 'none';
+
+    try {
+      const r    = await fetch(`${API_BASE}/admin/tenants`, { headers: { 'x-api-key': API_KEY } });
+      const data = await r.json();
+
+      if (!r.ok) {
+        document.getElementById('contacts-loading').textContent =
+          r.status === 401 ? 'Authentication failed — check your admin key.' :
+          r.status === 403 ? 'Access denied — admin key required.' :
+          `Failed to load contacts (${r.status}).`;
+        return;
+      }
+
+      const list = data.contacts ?? [];
+
+      document.getElementById('contacts-loading').style.display = 'none';
+
+      if (!list.length) {
+        document.getElementById('contacts-empty').style.display = 'block';
+        return;
+      }
+
+      const tbody = document.getElementById('contacts-body');
+      tbody.innerHTML = '';
+
+      list.sort((a, b) => a.tenant_id.localeCompare(b.tenant_id)).forEach(c => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td><strong>${esc(c.tenant_id)}</strong></td>
+          <td>${c.email ? esc(c.email) : '<span style="color:var(--muted)">—</span>'}</td>
+          <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;">${c.webhook_url ? `<span title="${esc(c.webhook_url)}">${esc(c.webhook_url)}</span>` : '<span style="color:var(--muted)">—</span>'}</td>
+          <td>
+            <div class="actions">
+              <button class="btn btn-sm btn-outline" onclick="editContact(${JSON.stringify(JSON.stringify(c))})">Edit</button>
+              <button class="btn btn-sm btn-danger" onclick="deleteContact('${esc(c.tenant_id)}')">Remove</button>
+            </div>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      document.getElementById('contacts-table').style.display = 'table';
+    } catch {
+      document.getElementById('contacts-loading').textContent = 'Failed to load contacts.';
+    }
+  }
+
+  function showContactForm(title = 'Add tenant contact') {
+    editingTenantId = null;
+    document.getElementById('form-title').textContent = title;
+    document.getElementById('form-tenant-id').value = '';
+    document.getElementById('form-tenant-id').disabled = false;
+    document.getElementById('form-email').value   = '';
+    document.getElementById('form-webhook').value = '';
+    setFormMessage(null);
+    document.getElementById('contact-form').style.display = 'block';
+    document.getElementById('form-tenant-id').focus();
+    document.getElementById('contact-form').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  function editContact(jsonStr) {
+    const c = JSON.parse(jsonStr);
+    editingTenantId = c.tenant_id;
+    document.getElementById('form-title').textContent = `Edit — ${c.tenant_id}`;
+    document.getElementById('form-tenant-id').value    = c.tenant_id;
+    document.getElementById('form-tenant-id').disabled = true;
+    document.getElementById('form-email').value        = c.email ?? '';
+    document.getElementById('form-webhook').value      = c.webhook_url ?? '';
+    setFormMessage(null);
+    document.getElementById('contact-form').style.display = 'block';
+    document.getElementById('contact-form').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  function hideContactForm() {
+    document.getElementById('contact-form').style.display = 'none';
+    editingTenantId = null;
+  }
+
+  async function saveContact() {
+    const tenantId  = document.getElementById('form-tenant-id').value.trim();
+    const email     = document.getElementById('form-email').value.trim();
+    const webhookUrl = document.getElementById('form-webhook').value.trim();
+
+    if (!tenantId) { setFormMessage('Tenant ID is required.', 'error'); return; }
+    if (!email && !webhookUrl) { setFormMessage('Provide at least an email or a webhook URL.', 'error'); return; }
+
+    const btn = document.getElementById('form-save-btn');
+    btn.disabled = true;
+    btn.textContent = 'Saving…';
+    setFormMessage(null);
+
+    const body = {};
+    if (email)     body.email       = email;
+    if (webhookUrl) body.webhook_url = webhookUrl;
+
+    try {
+      const r = await fetch(`${API_BASE}/admin/tenants/${encodeURIComponent(tenantId)}/contact`, {
+        method:  'PUT',
+        headers: { 'x-api-key': API_KEY, 'Content-Type': 'application/json' },
+        body:    JSON.stringify(body),
+      });
+
+      const data = await r.json();
+      if (!r.ok) { setFormMessage(data.error ?? `Error ${r.status}`, 'error'); return; }
+
+      setFormMessage('Saved successfully.', 'success');
+      setTimeout(() => {
+        hideContactForm();
+        loadTenantContacts();
+      }, 800);
+    } catch {
+      setFormMessage('Failed to save. Check your connection.', 'error');
+    } finally {
+      btn.disabled    = false;
+      btn.textContent = 'Save';
+    }
+  }
+
+  async function deleteContact(tenantId) {
+    if (!confirm(`Remove all contact details for "${tenantId}"?`)) return;
+
+    try {
+      const r = await fetch(`${API_BASE}/admin/tenants/${encodeURIComponent(tenantId)}/contact`, {
+        method:  'DELETE',
+        headers: { 'x-api-key': API_KEY },
+      });
+      if (!r.ok) { alert('Failed to remove contact.'); return; }
+      loadTenantContacts();
+    } catch {
+      alert('Failed to remove contact. Check your connection.');
+    }
+  }
+
+  function setFormMessage(msg, type) {
+    const el = document.getElementById('form-message');
+    if (!msg) { el.style.display = 'none'; return; }
+    el.textContent  = msg;
+    el.className    = `form-message ${type}`;
+    el.style.display = 'block';
+  }
+
+  // ── Detail panel (unchanged) ───────────────────────────────────────────────
+  function openPanel(row) {
+    const body = document.getElementById('panel-body');
+
+    const ts = row.timestamp
+      ? new Date(row.timestamp).toLocaleString('en-GB', { dateStyle: 'long', timeStyle: 'medium' })
+      : '—';
+
+    body.innerHTML = `
+      <div class="section-title">Event</div>
+      <div class="field-row"><span class="field-label">Event ID</span><span class="field-value">${row.event_id ?? '—'}</span></div>
+      <div class="field-row"><span class="field-label">Timestamp</span><span class="field-value">${ts}</span></div>
+      <div class="field-row"><span class="field-label">Tenant</span><span class="field-value">${row.tenant_id ?? '—'}</span></div>
+      <div class="field-row"><span class="field-label">Model version</span><span class="field-value">${row.model_version ?? '—'}</span></div>
+      <div class="field-row"><span class="field-label">Human in loop</span><span class="field-value">${row.human_in_loop ? 'Yes' : 'No'}</span></div>
+
+      <div class="section-title">Hashes (privacy-preserving)</div>
+      <div class="field-row"><span class="field-label">System prompt hash</span></div>
+      <div class="hash-value">${row.system_prompt_hash ?? '—'}</div>
+      <br/>
+      <div class="field-row"><span class="field-label">Input data hash</span></div>
+      <div class="hash-value">${row.input_data_hash ?? '—'}</div>
+
+      <div class="section-title">AI Decision Output</div>
+      <pre class="json-block">${JSON.stringify(row.ai_decision_output ?? {}, null, 2)}</pre>
+
+      <div class="section-title">Tamper-evidence check</div>
+      <div id="history-loading"><span class="spinner"></span> Checking integrity…</div>
+      <div id="history-result" style="display:none"></div>
+    `;
+
+    document.getElementById('overlay').style.display = 'block';
+    document.getElementById('panel').classList.add('open');
+    loadHistory(row.event_id);
+  }
+
+  async function loadHistory(eventId) {
+    if (!eventId) return;
+    try {
+      const r    = await fetch(`${API_BASE}/audit/events/${encodeURIComponent(eventId)}/history`, {
+        headers: { 'x-api-key': API_KEY }
+      });
+      const data = await r.json();
+
+      document.getElementById('history-loading').style.display = 'none';
+      const result = document.getElementById('history-result');
+      result.style.display = 'block';
+
+      const verified = data.integrity_verified;
+      const note     = data.integrity_note ?? '';
+      const color    = verified ? 'var(--accent)' : verified === false ? 'var(--danger)' : 'var(--muted)';
+      const icon     = verified ? '✓' : verified === false ? '✗' : '–';
+
+      result.innerHTML = `
+        <div style="padding:12px;border-radius:6px;background:${verified ? 'var(--accent-lt)' : verified === false ? 'var(--danger-lt)' : 'var(--bg)'};border:1px solid ${color};margin-bottom:12px;">
+          <div style="font-weight:700;color:${color};margin-bottom:4px;">${icon} ${verified ? 'Integrity verified' : verified === false ? 'Integrity check failed' : 'Integrity unknown'}</div>
+          <div style="font-size:0.82rem;color:var(--muted)">${note}</div>
+        </div>
+        ${data.archived_record ? `
+          <div class="section-title" style="margin-top:0">Archived record (S3 — immutable)</div>
+          <pre class="json-block">${JSON.stringify(data.archived_record, null, 2)}</pre>
+        ` : ''}
+      `;
+    } catch {
+      const el = document.getElementById('history-loading');
+      if (el) el.textContent = 'Could not load integrity check.';
+    }
+  }
+
+  function closePanel() {
+    document.getElementById('panel').classList.remove('open');
+    document.getElementById('overlay').style.display = 'none';
+  }
+
+  // ── Export CSV (unchanged) ─────────────────────────────────────────────────
+  function exportCsv() {
+    if (!allRows.length) return;
+    const headers = ['event_id', 'timestamp', 'tenant_id', 'model_version', 'human_in_loop', 'system_prompt_hash', 'input_data_hash'];
+    const lines   = [headers.join(',')];
+    allRows.forEach(row => {
+      lines.push(headers.map(h => `"${String(row[h] ?? '').replace(/"/g, '""')}"`).join(','));
+    });
+    const a    = document.createElement('a');
+    a.href     = URL.createObjectURL(new Blob([lines.join('\r\n')], { type: 'text/csv' }));
+    a.download = `audit-logs-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+  }
+
+  // ── Helpers ────────────────────────────────────────────────────────────────
+  function showError(msg) {
+    const bar = document.getElementById('error-bar');
+    bar.querySelector('.err-msg').textContent = msg ?? '';
+    bar.style.display = msg ? 'flex' : 'none';
+  }
+
+  function esc(str) {
+    return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+</script>
+</body>
+</html>

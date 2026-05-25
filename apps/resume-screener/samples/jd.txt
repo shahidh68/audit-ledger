@@ -1,0 +1,18 @@
+Staff Platform Engineer
+
+We are looking for a Staff Platform Engineer to own the reliability,
+scalability, and developer experience of our cloud platform. You will lead
+designs that span teams, mentor senior engineers, and set the technical
+direction for the next 18 months of platform investment.
+
+Requirements:
+- 7+ years of professional software engineering experience
+- Deep hands-on expertise with: Python, AWS, Kubernetes, Terraform, Docker, CI/CD
+- Strong on-call and incident response track record
+- Bachelor's degree in Computer Science or equivalent practical experience
+- Excellent written and verbal communication
+
+Nice to have:
+- Experience with multi-region architectures
+- Public open-source contributions
+- Track record of mentoring senior engineers

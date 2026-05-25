@@ -1,0 +1,20 @@
+[project]
+name = "ai-audit-ledger"
+version = "0.1.0"
+description = "AI Audit Ledger Python SDK — local SHA-256 + async ingest"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "aiohttp>=3.9.0",
+]
+
+[project.optional-dependencies]
+dev = ["pydantic>=2.5.0"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["ai_audit_ledger*"]

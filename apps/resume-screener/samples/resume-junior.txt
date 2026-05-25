@@ -1,0 +1,16 @@
+Sam Doe
+Remote
+
+Summary
+Recent graduate with 1 year of experience building small web apps.
+
+Skills
+HTML, CSS, JavaScript, basic Python
+
+Experience
+TinyShop — Junior Web Developer (1 year)
+- Built marketing landing pages.
+- Helped maintain a Shopify theme.
+
+Education
+BSc in Marketing, Local College

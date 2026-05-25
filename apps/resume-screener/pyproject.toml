@@ -1,0 +1,29 @@
+[project]
+name = "resume-screener"
+version = "0.1.0"
+description = "Resume-screening simulator that logs decisions to AI Audit Ledger"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "click>=8.1",
+    "faker>=24.0",
+    "tqdm>=4.66",
+    "python-dotenv>=1.0",
+    "ai-audit-ledger",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.4"]
+
+[project.scripts]
+resume-screener = "resume_screener.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
