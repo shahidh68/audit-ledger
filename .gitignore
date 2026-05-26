@@ -74,3 +74,8 @@ secrets/
 *.pem
 *.key
 *.crt
+
+# Public-demo dashboard config — contains a tenant-scoped read key.
+# The example template `demo-config.example.js` is committed; the real
+# `demo-config.js` is generated locally and deployed alongside index.html.
+dashboard/demo-config.js

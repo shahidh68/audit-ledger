@@ -598,8 +598,22 @@
     }
     @keyframes spin { to { transform: rotate(360deg); } }
   </style>
+
+  <!-- Optional demo-mode config. File is gitignored; create from demo-config.example.js
+       and deploy alongside index.html to enable public demo via ?demo=1 URL param. -->
+  <script src="demo-config.js" defer onerror="window.__noDemoConfig=true"></script>
 </head>
 <body>
+
+<!-- ── Demo-mode banner (shown only when ?demo=1 + demo-config.js loaded) ─── -->
+<div id="demo-banner" style="display:none; background: #fdf6e3; border-bottom: 1px solid #b88419; color: #0a2942; font-family: var(--font-ui); font-size: 13px; padding: 10px 20px; text-align: center;">
+  <strong style="color: #b88419;">DEMO MODE</strong>
+  &nbsp;&middot;&nbsp;
+  <span id="demo-banner-text">You are viewing synthetic data on a public demo. Records are seeded examples, not real customer decisions.</span>
+  &nbsp;&middot;&nbsp;
+  <a href="https://github.com/shahidh68/audit-ledger" style="color: #0f3a5f; text-decoration: underline;">Deploy your own ledger</a>
+</div>
+
 
 <!-- ── Icon sprite ──────────────────────────────────────────────────────── -->
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
@@ -738,9 +752,9 @@
     </nav>
 
     <div class="header-actions">
-      <button class="btn btn-ghost" onclick="disconnect()">
+      <button class="btn btn-ghost" id="header-disconnect-btn" onclick="disconnect()">
         <svg class="icon icon-sm" aria-hidden="true"><use href="#i-logout"/></svg>
-        Disconnect
+        <span id="header-disconnect-label">Disconnect</span>
       </button>
     </div>
   </header>
@@ -939,7 +953,43 @@
   let editingTenantId = null;
 
   // ── Config ─────────────────────────────────────────────────────────────────
+  // Demo mode: visiting `?demo=1` skips the setup screen and uses credentials
+  // baked into a separate `demo-config.js` file (gitignored). The demo creds
+  // are scoped to a synthetic-data-only tenant; even if extracted from the JS
+  // they grant read access only to a tenant containing no real customer data.
+  function isDemoMode() {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('demo') === '1'
+      && window.AUDIT_LEDGER_DEMO_CONFIG
+      && window.AUDIT_LEDGER_DEMO_CONFIG.api_url
+      && window.AUDIT_LEDGER_DEMO_CONFIG.read_key;
+  }
+
+  function showDemoBanner() {
+    const banner = document.getElementById('demo-banner');
+    if (!banner) return;
+    banner.style.display = 'block';
+    const cfg = window.AUDIT_LEDGER_DEMO_CONFIG || {};
+    if (cfg.banner_text) {
+      const span = document.getElementById('demo-banner-text');
+      if (span) span.textContent = cfg.banner_text;
+    }
+  }
+
   window.addEventListener('DOMContentLoaded', () => {
+    if (isDemoMode()) {
+      const cfg = window.AUDIT_LEDGER_DEMO_CONFIG;
+      API_BASE = cfg.api_url.replace(/\/$/, '');
+      API_KEY  = cfg.read_key;
+      // Deliberately NOT calling saveConfig() — demo creds should not persist
+      // to localStorage, so the visitor's browser stays clean for any future
+      // real-ledger connection.
+      showDemoBanner();
+      window.__demoMode = true;
+      showApp();
+      return;
+    }
+
     const saved = loadConfig();
     if (saved) {
       API_BASE = saved.url;
@@ -990,7 +1040,15 @@
   }
 
   function disconnect() {
-    localStorage.removeItem('ail_config');
+    // In demo mode, "Disconnect" just hides the demo and goes to the setup
+    // screen so a visitor can connect their own ledger.
+    if (window.__demoMode) {
+      window.__demoMode = false;
+      const banner = document.getElementById('demo-banner');
+      if (banner) banner.style.display = 'none';
+    } else {
+      localStorage.removeItem('ail_config');
+    }
     API_BASE = API_KEY = '';
     allRows  = [];
     isAdmin  = false;
@@ -1002,6 +1060,13 @@
   function showApp() {
     document.getElementById('config-screen').style.display = 'none';
     document.getElementById('app').style.display = 'block';
+
+    // In demo mode, relabel "Disconnect" to nudge visitors toward their own
+    // ledger rather than implying a logout flow.
+    if (window.__demoMode) {
+      const label = document.getElementById('header-disconnect-label');
+      if (label) label.textContent = 'Use your own ledger';
+    }
 
     applyPreset(30, /* skipReload */ true);
 
