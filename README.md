@@ -6,6 +6,14 @@ Every AI decision your system makes is recorded once, sealed in S3 Object Lock u
 
 [License: Apache 2.0](#license) · Python + Node.js SDKs · AWS CDK · 7-year retention by default
 
+**[Live demo dashboard →](https://d2pfirb2397ixy.cloudfront.net/?demo=1)** &nbsp;&middot;&nbsp; 30 synthetic decisions you can click through and verify.
+
+<p align="center">
+  <img src="./demo.gif" alt="Loan triage demo — two AI agents, human-in-the-loop, three audit events written to the ledger" />
+</p>
+
+> Two AI agents (triage and risk) plus a human-in-the-loop reviewer triaging a borderline loan application. Each step writes an independent audit event. The full chain is reconstructable from the audit trail alone.
+
 ---
 
 ## Why this exists
