@@ -350,6 +350,111 @@ The fallback path exists for backwards compatibility with the v0.2 plain-SHA-256
 
 The rotation tradeoff is real and worth being explicit about. Forward-only rotation is fine for tamper verification because the ledger compares stored digests against stored digests. It does not work for searching across the rotation boundary using the same PII value, because that value now hashes to a different digest under the new key. Tenants who need historical PII lookups keep the old key alongside the new one and search with both. There is no scheme inside the ledger that re-keys old hashes, by design — re-keying would require the ledger operator to know either the old or new key, which would defeat the property the change is meant to preserve.
 
+#### How the customer presents the key to each client type
+
+The SDKs and the MCP server all read `AUDIT_HMAC_KEY` from the process environment at hash time. The mechanism for putting it there depends on which client surface the customer is using. None of these involve sending the key over the network. None of them require the customer to share the key with the ledger operator.
+
+**Python SDK.** Set the environment variable in whatever way the host Python process is launched:
+
+```bash
+export AUDIT_HMAC_KEY="<your-tenant-hmac-secret>"
+python your_app.py
+```
+
+Or load from `.env` with `python-dotenv`. Or read from AWS Secrets Manager / HashiCorp Vault and inject via the deployment platform's secret manager (e.g. ECS task definition, Kubernetes secret, Lambda environment).
+
+**Node SDK.** Same pattern:
+
+```bash
+export AUDIT_HMAC_KEY="<your-tenant-hmac-secret>"
+node your_app.js
+```
+
+Or via `dotenv`, or via the host platform's secret injection.
+
+**MCP server, Claude Desktop.** The `env` block inside the `mcpServers` entry in `claude_desktop_config.json` (macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`, Windows: `%APPDATA%\Claude\claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "audit-ledger": {
+      "command": "npx",
+      "args": ["-y", "audit-ledger-mcp"],
+      "env": {
+        "AUDIT_API_URL":   "https://<api-id>.execute-api.<region>.amazonaws.com/prod",
+        "AUDIT_WRITE_KEY": "<your-tenant-write-key>",
+        "AUDIT_READ_KEY":  "<your-tenant-read-key>",
+        "AUDIT_HMAC_KEY":  "<your-tenant-hmac-secret>"
+      }
+    }
+  }
+}
+```
+
+When Claude Desktop spawns the MCP server, it injects this `env` block into the child process. The MCP server then sees `process.env.AUDIT_HMAC_KEY`.
+
+**MCP server, Cursor.** Same JSON shape inside Cursor's MCP settings panel.
+
+**MCP server, LangGraph (Python via `langchain-mcp-adapters`).** The `env` dict on the `MultiServerMCPClient` server entry:
+
+```python
+client = MultiServerMCPClient({
+    "audit-ledger": {
+        "command": "npx",
+        "args": ["-y", "audit-ledger-mcp"],
+        "transport": "stdio",
+        "env": {
+            "AUDIT_API_URL":   os.environ["AUDIT_API_URL"],
+            "AUDIT_WRITE_KEY": os.environ["AUDIT_WRITE_KEY"],
+            "AUDIT_READ_KEY":  os.environ["AUDIT_READ_KEY"],
+            "AUDIT_HMAC_KEY":  os.environ["AUDIT_HMAC_KEY"],
+        },
+    }
+})
+```
+
+Note the pattern: the LangGraph host process reads `AUDIT_HMAC_KEY` from its own environment, then passes it explicitly to the spawned MCP child. The host's environment is itself populated however the deploying team does that (Vault, ECS secret, plain `export`, etc.).
+
+**MCP server, direct shell.** Pass it inline when spawning:
+
+```bash
+AUDIT_API_URL=... AUDIT_WRITE_KEY=... AUDIT_READ_KEY=... AUDIT_HMAC_KEY=... npx -y audit-ledger-mcp
+```
+
+This is mostly used for development and CI smoke tests. Production usage goes through one of the above client paths.
+
+**Containerised deployment.** Set the environment variable in the container spec. For example, a Kubernetes Deployment manifest with `envFrom: secretRef` pointing at a Kubernetes Secret that the platform team rotates separately. The hashing logic is unchanged: the SDK or MCP process reads `process.env.AUDIT_HMAC_KEY` exactly as in the bare-shell case.
+
+**What does not work**
+
+The MCP protocol has no mechanism for the client to pass a secret to the server during an MCP `initialize` handshake. The server must already have the key in its environment by the time the client connects. This is by design: secrets travelling through the MCP protocol would be visible to whatever intermediary layer was forwarding the protocol traffic, which defeats the customer-holds-the-key property. If a future MCP client adds a "pass this secret to the server" feature, the customer should not use it for `AUDIT_HMAC_KEY`. The env block is the right place.
+
+#### Three implementations, not one shared library
+
+The HMAC logic exists three times in the codebase, in three different languages, in two different repos:
+
+| Implementation | Repo | File | Language |
+|---|---|---|---|
+| Python SDK | `ai-audit-ledger` | `sdk/python/ai_audit_ledger/hashing.py` | Python |
+| Node SDK | `ai-audit-ledger` | `sdk/nodejs/src/hashing.mjs` | JavaScript |
+| MCP server | `audit-ledger-mcp` | `src/hashing.ts` | TypeScript |
+
+These are not three thin wrappers around a shared library. Each is a self-contained implementation of `HMAC-SHA256(env.AUDIT_HMAC_KEY, input).hexdigest()` with a plain-SHA-256 fallback when the env var is unset.
+
+**Why no shared library:**
+
+- The MCP server has to be its own published npm package because MCP clients spawn it as `npx audit-ledger-mcp` over stdio. It cannot import from the SDK repo at runtime.
+- The Python SDK is imported into customer Python applications via PyPI. Customers do not want a Python package that depends on a Node package or vice versa.
+- A shared hashing library would need to be a fourth published package that all three consumers depend on. That introduces a release-coupling problem: bumping the shared library would require coordinated releases across three downstream packages, and a stale consumer would silently use an older hashing implementation than the others.
+
+The cost of three implementations is duplicate code that must stay in sync. The mitigation is enforced parity through unit tests: each implementation asserts its output against the canonical `HMAC-SHA256(key, input).hex()` computed inline using its language's standard library. Drift in any single implementation fails CI on that repo immediately. Cross-repo drift would be caught when the customer runs end-to-end and gets different digests for the same input. In practice the tests catch it first.
+
+**One pre-existing wire-format quirk:**
+
+The MCP server's `hashPrompt` normalises whitespace (runs of whitespace collapsed to single spaces, leading/trailing whitespace trimmed) before hashing. The SDKs' `hashPrompt` does not. This means that for a prompt with internal whitespace variation, `system_prompt_hash` computed via the MCP server will differ from `system_prompt_hash` computed via the Python or Node SDK, even with the same `AUDIT_HMAC_KEY`. For prompts without internal whitespace variation (which is the overwhelming majority of cases), the hashes are identical.
+
+This quirk predates v0.3. It exists because the MCP server is most commonly used in interactive contexts (Claude Desktop, Cursor) where prompts get reformatted by the host application, and the normalisation was added to keep prompt-fingerprint tracking stable across cosmetic edits. Fixing the divergence is a wire-format change, which is deferred until a v1.0 wire-format consolidation pass. The `hashPii` function (used for `input_data_hash`) is identical across all three implementations and produces identical output for identical input.
+
 ### Immutability
 
 - Every record is written to S3 with Object Lock COMPLIANCE mode

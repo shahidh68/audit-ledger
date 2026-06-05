@@ -25,7 +25,9 @@ Those use **different passwords** (API keys): one for **customers who send**, on
 
 They do not send the full resume or name in plain text if they follow the design: they **hash** that stuff on their own computers and only send **fingerprints** (hashes) plus things like model name and decision JSON.
 
-**Plain English:** They prepare a **summary package** that proves *what went in* without keeping your copy of the raw document.
+From v0.3 the hashing uses a **secret the customer holds and we never see** (HMAC-SHA256 keyed off `AUDIT_HMAC_KEY`). That matters because plain hashes of low-entropy values like an email or a name can be reversed in seconds by anyone determined enough. Hashing with a secret only the customer holds means the fingerprint cannot be reversed by anyone outside their environment, which is what regulators expect when you describe a value as pseudonymised.
+
+**Plain English:** They prepare a **summary package** that proves *what went in* without keeping your copy of the raw document, and without the package being something anyone else could trace back to a real person.
 
 ### 2. API Gateway
 
@@ -78,8 +80,9 @@ If something keeps failing when filing, the message lands here so **ops** can se
 When someone calls **GET** (with the **read** key), this code:
 - **Lists events** from DynamoDB (fast, filterable)
 - For a **tamper-evidence check**: fetches both the DynamoDB record and the original locked S3 copy, compares them, and reports whether they match
+- For a **completeness check** (from v0.3): compares the per-tenant counter against the rows actually present and returns any sequence numbers that are missing
 
-**Plain English:** **Read-only access** to the records. The tamper check is like asking "does the filing cabinet card match the sealed original?" — any discrepancy is flagged immediately.
+**Plain English:** **Read-only access** to the records. The tamper check is like asking "does the filing cabinet card match the sealed original?" — any discrepancy is flagged immediately. The completeness check is like asking "are any filing cards missing from the cabinet?" — any gap shows up as a numbered slot with nothing in it.
 
 ---
 
@@ -96,12 +99,13 @@ The **queue** is the reason **"accept" can be fast** while **"permanent storage"
 
 | Piece | Layman's job |
 |--------|----------------|
-| **SDK** | Hash sensitive stuff locally; send only safe summary + decision info. |
+| **SDK** | Hash sensitive stuff locally using the customer's own secret (HMAC from v0.3); send only the safe summary plus decision info. |
 | **API Gateway** | Public HTTPS address; routes traffic to the right function. |
 | **Ingest Lambda** | Validate key + payload; enqueue; return **202** fast. |
 | **Queue (SQS)** | Buffer so spikes don't overwhelm filing. |
-| **Processor Lambda** | Take from queue; write each event to DynamoDB and S3. |
-| **DynamoDB** | Fast searchable index for listing and filtering records. |
-| **S3 Object Lock** | Permanent sealed vault — records locked for 7 years, cannot be altered. |
-| **Read Lambda** | Read-only queries for lists and per-event tamper-evidence checks. |
+| **Processor Lambda** | Take from queue; allocate a per-tenant sequence number (from v0.3); write each event to DynamoDB and S3. |
+| **TenantSequenceTable** | Per-tenant counter (from v0.3). Used to spot any missing records. |
+| **DynamoDB (audit table)** | Fast searchable index for listing and filtering records. |
+| **S3 Object Lock** | Permanent sealed vault. Records locked for 7 years, cannot be altered. |
+| **Read Lambda** | Read-only queries for lists, per-event tamper-evidence checks, and completeness checks (from v0.3). |
 | **DLQ** | Hold messages that failed repeatedly so you can fix issues. |
