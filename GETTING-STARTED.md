@@ -265,7 +265,7 @@ Your system is now running. Here is a summary of what exists:
 
 - A public web address that customers can send AI decision records to
 - A secure vault holding all API keys (not stored anywhere visible)
-- A tamper-resistant logbook that stores every record permanently
+- A tamper-resistant logbook that stores every record permanently, and that lets you prove no records have been deleted via the per-tenant sequence counter (v0.3+)
 - A rate limiter that prevents any one customer from overwhelming the system
 - A dashboard you can open to browse, inspect, and export records
 
