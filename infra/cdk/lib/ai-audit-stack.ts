@@ -112,6 +112,25 @@ export class AiAuditLedgerStack extends cdk.Stack {
       projectionType: dynamodb.ProjectionType.ALL,
     });
 
+    // ── Tenant sequence table ─────────────────────────────────────────────────
+    // Per-tenant monotonic counter used by the processor to assign sequence_no
+    // to each successfully stored audit record. The verify-completeness
+    // endpoint compares the counter against the rows present in AuditTable to
+    // surface any deletions or omissions.
+    //
+    // Item shape: { tenant_id, current_sequence: <number>, updated_at: <ISO> }
+    //
+    // RETAIN so a stack teardown does not reset counters and create spurious
+    // gaps on the next deploy. Only the processor writes; the read Lambda
+    // reads the current value when answering verify-completeness with no
+    // explicit upper bound.
+    const tenantSequenceTable = new dynamodb.Table(this, 'TenantSequenceTable', {
+      partitionKey: { name: 'tenant_id', type: dynamodb.AttributeType.STRING },
+      billingMode:  dynamodb.BillingMode.PAY_PER_REQUEST,
+      pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true },
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+    });
+
     // ── S3 audit archive (Object Lock — WORM storage) ─────────────────────────
     // Records written here cannot be modified or deleted for the retention period.
     // This is the tamper-evidence guarantee: S3 Object Lock in COMPLIANCE mode is
@@ -232,15 +251,23 @@ export class AiAuditLedgerStack extends cdk.Stack {
       memorySize: 512,
       logGroup: new logs.LogGroup(this, 'ProcessorFnLogGroup', { retention: logs.RetentionDays.ONE_WEEK }),
       environment: {
-        AUDIT_TABLE: auditTable.tableName,
-        AUDIT_BUCKET: auditBucket.bucketName,
-        RETENTION_YEARS: String(retentionYears),
+        AUDIT_TABLE:           auditTable.tableName,
+        AUDIT_BUCKET:          auditBucket.bucketName,
+        TENANT_SEQUENCE_TABLE: tenantSequenceTable.tableName,
+        RETENTION_YEARS:       String(retentionYears),
       },
     });
     queue.grantConsumeMessages(processorFn);
     processorFn.addEventSource(new SqsEventSource(queue, { batchSize: 10 }));
-    auditTable.grantWriteData(processorFn);
+    // Processor needs ReadData (for the event_id-index idempotency check) plus
+    // WriteData (for the audit row write). Read access was implicit before via
+    // ConditionExpression; making it explicit so the new Query on the GSI is
+    // unambiguously authorised.
+    auditTable.grantReadWriteData(processorFn);
     auditBucket.grantPut(processorFn);
+    // Atomic counter increment for sequence_no allocation. The processor is the
+    // only principal allowed to write this table.
+    tenantSequenceTable.grantReadWriteData(processorFn);
 
     // ── Read Lambda ───────────────────────────────────────────────────────────
     const readFn = new NodejsFunction(this, 'ReadFn', {
@@ -251,14 +278,18 @@ export class AiAuditLedgerStack extends cdk.Stack {
       memorySize: 512,
       logGroup: new logs.LogGroup(this, 'ReadFnLogGroup', { retention: logs.RetentionDays.ONE_WEEK }),
       environment: {
-        AUDIT_TABLE: auditTable.tableName,
-        AUDIT_BUCKET: auditBucket.bucketName,
-        READ_KEY_SECRET_ARN: readKeySecret.secretArn,
-        CORS_ALLOW_ORIGIN: this.node.tryGetContext('corsOrigin') ?? '',
+        AUDIT_TABLE:           auditTable.tableName,
+        AUDIT_BUCKET:          auditBucket.bucketName,
+        TENANT_SEQUENCE_TABLE: tenantSequenceTable.tableName,
+        READ_KEY_SECRET_ARN:   readKeySecret.secretArn,
+        CORS_ALLOW_ORIGIN:     this.node.tryGetContext('corsOrigin') ?? '',
       },
     });
     auditTable.grantReadData(readFn);
     auditBucket.grantRead(readFn);
+    // Read-only — the read Lambda never increments the counter, only inspects it
+    // to determine the upper bound for verify-completeness when no `to` is given.
+    tenantSequenceTable.grantReadData(readFn);
     readKeySecret.grantRead(readFn);
 
     // ── Status Lambda ─────────────────────────────────────────────────────────
@@ -455,6 +486,14 @@ export class AiAuditLedgerStack extends cdk.Stack {
     const statusResource = eventById.addResource('status');
     statusResource.addMethod('GET', new apigateway.LambdaIntegration(statusFn));
 
+    // GET /audit/verify-completeness?from=<seq>&to=<seq>
+    // Tenant-scoped via the read key. Returns the list of missing sequence
+    // numbers in the requested range, so a deleted DynamoDB row shows up as
+    // a gap rather than as "record not found", which is indistinguishable
+    // from a typo'd event_id.
+    const completenessResource = audit.addResource('verify-completeness');
+    completenessResource.addMethod('GET', new apigateway.LambdaIntegration(readFn));
+
     const restoreResource = audit.addResource('restore');
     const restoreByToken  = restoreResource.addResource('{token}');
     restoreByToken.addMethod('GET', new apigateway.LambdaIntegration(restoreFn));
@@ -536,6 +575,10 @@ export class AiAuditLedgerStack extends cdk.Stack {
       description: 'S3 bucket with Object Lock — tamper-evident archive',
     });
     new cdk.CfnOutput(this, 'AuditTableName', { value: auditTable.tableName });
+    new cdk.CfnOutput(this, 'TenantSequenceTableName', {
+      value: tenantSequenceTable.tableName,
+      description: 'Per-tenant monotonic counter for sequence_no assignment and verify-completeness',
+    });
     new cdk.CfnOutput(this, 'QueueUrl', { value: queue.queueUrl });
     new cdk.CfnOutput(this, 'RateLimitTableName', { value: rateLimitTable.tableName });
     new cdk.CfnOutput(this, 'DashboardUrl', {
