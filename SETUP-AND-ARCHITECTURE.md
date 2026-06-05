@@ -25,10 +25,10 @@ You **deploy** this setup into your **AWS account** using the **CDK** project un
 | Location | Role |
 |----------|------|
 | `schemas\` | Definitions of the JSON body (TypeScript + Python) so everyone agrees on field names and rules. |
-| `sdk\python\` | Python helper: hash sensitive text locally, send events to the ingest URL. |
+| `sdk\python\` | Python helper: hash sensitive text locally with the customer's HMAC key (v0.3+; falls back to plain SHA-256 if unset), send events to the ingest URL. |
 | `sdk\nodejs\` | Node helper: same idea for JavaScript servers. |
-| `infra\cdk\` | **Infrastructure as code**: tells AWS how to create API Gateway, queues, Lambdas, DynamoDB tables, and S3 bucket. |
-| `infra\cdk\lambda\` | The actual **ingest**, **processor**, and **read** program code that runs in AWS. |
+| `infra\cdk\` | **Infrastructure as code**: tells AWS how to create API Gateway, queues, Lambdas, DynamoDB tables (including the `TenantSequenceTable` from v0.3+), and S3 bucket. |
+| `infra\cdk\lambda\` | The actual **ingest**, **processor**, and **read** program code that runs in AWS, plus shared libraries for hashing, sequence allocation, and completeness computation. |
 | `dashboard\` | Static HTML dashboard — open in any browser, no install needed. |
 | [DEPLOYMENT.md](./DEPLOYMENT.md) | Lay-friendly **how to deploy** instructions. |
 | [GETTING-STARTED.md](./GETTING-STARTED.md) | Step-by-step setup from scratch (AWS account, Node.js, AWS CLI). |
@@ -42,12 +42,13 @@ You **deploy** this setup into your **AWS account** using the **CDK** project un
 | **API Gateway** | The public web address for your API | Routes **POST** (ingest) and **GET** (read) to the right Lambda. |
 | **Ingest Lambda** | The "receiver" | Checks the **tenant API key** and the JSON shape, then puts a message on the queue. Returns **202 Accepted** without waiting for the database. |
 | **SQS queue** | A waiting line | Holds work so spikes do not overload the storage write path. |
-| **Processor Lambda** | The "writer" | Takes messages from the queue and writes each event to **DynamoDB** (index) and **S3** (immutable archive). |
+| **Processor Lambda** | The "writer" | Takes messages from the queue, allocates a per-tenant sequence number (v0.3+), and writes each event to **DynamoDB** (index) and **S3** (immutable archive). |
 | **Dead-letter queue (DLQ)** | A side tray | If a message fails too many times, it lands here for someone to inspect. |
 | **DynamoDB (audit table)** | The searchable index | Stores all records in a queryable form — filter by date, tenant, or look up a specific event ID. |
+| **DynamoDB (tenant sequence table)** | The per-tenant counter (v0.3+) | Holds a monotonic counter per tenant so the read path can detect any missing records. |
 | **S3 bucket (Object Lock)** | The permanent sealed vault | Every record written here is locked in COMPLIANCE mode — cannot be modified or deleted for 7 years, even by the account root. This is the tamper-evidence guarantee. |
 | **DynamoDB (rate limit table)** | Request counter | Tracks how many requests each customer has made per minute to enforce rate limits. |
-| **Read Lambda** | The "reader" | Answers **GET** requests: list logs, and for tamper-evidence checks — compares the DynamoDB record against the locked S3 original and reports whether they match. |
+| **Read Lambda** | The "reader" | Answers **GET** requests: list logs, run tamper-evidence checks (compares DynamoDB and locked S3 copies of one record), and from v0.3 also runs completeness checks (compares the per-tenant counter against records actually present and returns any missing sequence numbers). |
 | **Secrets Manager** | The key vault | Stores API keys securely. Keys are never exposed in config files or environment variables. |
 
 **Two different passwords (API keys):**
@@ -62,7 +63,8 @@ You **deploy** this setup into your **AWS account** using the **CDK** project un
 ```mermaid
 flowchart TB
   subgraph Clients["Customer systems (tenant side)"]
-    SDK["Python / Node SDKs\n(hash PII locally; never send raw text)"]
+    SDK["Python / Node SDKs\n(hash PII locally with\ncustomer-held HMAC key;\nnever send raw text)"]
+    MCP["audit-ledger-mcp\n(same hashing, called by\nClaude Desktop / Cursor /\nLangGraph agents)"]
   end
 
   subgraph AWS["AWS Cloud"]
@@ -70,9 +72,10 @@ flowchart TB
     ING["Lambda: Ingest\nvalidate key + body"]
     Q["SQS\nStandard queue"]
     DLQ["SQS DLQ\nfailed messages"]
-    PROC["Lambda: Processor\nwrite to index + vault"]
-    READ["Lambda: Read\nlist + tamper check"]
+    PROC["Lambda: Processor\nallocate sequence_no,\nwrite to index + vault"]
+    READ["Lambda: Read\nlist, tamper check,\ncompleteness check"]
     DB[("DynamoDB\nAudit index")]
+    SEQ[("DynamoDB\nTenantSequenceTable\nper-tenant counter")]
     S3[("S3 Object Lock\nImmutable archive\n7-year COMPLIANCE")]
   end
 
@@ -81,25 +84,28 @@ flowchart TB
   end
 
   SDK -->|"HTTPS POST\n/audit/events\nx-api-key + JSON"| APIGW
+  MCP -->|"HTTPS POST\n/audit/events\nx-api-key + JSON"| APIGW
   APIGW --> ING
   ING -->|"202 Accepted\n(enqueue only)"| Q
   Q --> PROC
   Q -.->|after retries| DLQ
-  PROC -->|"PutItem"| DB
+  PROC -->|"UpdateItem\n(increment counter)"| SEQ
+  PROC -->|"PutItem (with sequence_no)"| DB
   PROC -->|"PutObject\n(COMPLIANCE lock)"| S3
 
-  DASH -->|"HTTPS GET\n/audit/logs\n/audit/events/{id}/history"| APIGW
+  DASH -->|"HTTPS GET\n/audit/logs\n/audit/events/{id}/history\n/audit/verify-completeness"| APIGW
   APIGW --> READ
-  READ -->|"Query"| DB
+  READ -->|"Query (list + completeness)"| DB
+  READ -->|"GetItem (current counter)"| SEQ
   READ -->|"GetObject (integrity check)"| S3
 ```
 
 **How to read it**
 
-- **Left (SDKs):** Customer systems use the SDKs to hash names/resumes **on their side** and send only **hashes** and **decision JSON** to your API.
+- **Left (SDKs and MCP):** Customer systems either call the SDK from their own code, or run the MCP server as a child process that their AI agent calls via the Model Context Protocol. Both hash PII on the customer side with the customer-held `AUDIT_HMAC_KEY` (v0.3+) and send only the hashes and the structured decision to your API.
 - **Middle (ingest):** API Gateway hands **POST** traffic to the **ingest** Lambda. That Lambda **does not** write to the database; it only **validates** and **enqueues**. That keeps responses fast.
-- **Queue → processor:** The **processor** Lambda drains the queue and **writes to both DynamoDB and S3**. S3 uses Object Lock COMPLIANCE mode — records are sealed for 7 years.
-- **Right (read):** Compliance tools use **GET** with the **read** key. The tamper-evidence check fetches both copies (DynamoDB + S3) and compares them.
+- **Queue → processor:** The **processor** Lambda drains the queue, atomically allocates a per-tenant sequence number from the `TenantSequenceTable` (v0.3+), and writes the stamped record to both DynamoDB and S3. S3 uses Object Lock COMPLIANCE mode, which means records are sealed for 7 years.
+- **Right (read):** Compliance tools use **GET** with the **read** key. The tamper-evidence check fetches both copies (DynamoDB + S3) and compares them. The completeness check (v0.3+) compares the per-tenant counter against the records actually present and returns any missing sequence numbers.
 
 ---
 
@@ -172,6 +178,9 @@ Your exact host name comes from the deployment **outputs** (see [DEPLOYMENT.md](
 | POST | `audit/events` | Ingest one event (tenant key). |
 | GET | `audit/logs` | List events (read key); optional `from` and `to` date filters. |
 | GET | `audit/events/{eventId}/history` | Tamper-evidence check — compares DynamoDB record against S3 archive. |
+| GET | `audit/events/{eventId}/status` | Quick "did this event_id land?" check (tenant key or read key). |
+| GET | `audit/verify-completeness` | Completeness check (v0.3+). Returns any missing sequence numbers for the calling tenant. Optional `from` and `to` query params to narrow the range. |
+| GET, PUT, DELETE | `admin/tenants/{tenantId}/contact` | Admin-only (admin read key). Manage per-tenant email and webhook for failure notifications. |
 
 ---
 

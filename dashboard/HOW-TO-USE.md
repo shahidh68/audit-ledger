@@ -80,7 +80,7 @@ This shows you:
 The full event ID, exact timestamp, which customer it belongs to, which AI model was used, and whether a human reviewed the decision.
 
 **Privacy hashes**
-Instead of storing people's personal data (names, CVs, application forms), the system stores a *fingerprint* of that data. This fingerprint proves the data existed and has not changed, without exposing the actual content. This is how the system stays GDPR-friendly while still being audit-ready.
+Instead of storing people's personal data (names, CVs, application forms), the system stores a *fingerprint* of that data. From v0.3 onward, that fingerprint is computed using a secret the customer holds (HMAC-SHA256 with their `AUDIT_HMAC_KEY`), which means even the system operator cannot reverse it back to the original data. This is what regulators expect when you describe a value as pseudonymised, and it is how the system stays GDPR-friendly while still being audit-ready.
 
 **AI Decision Output**
 The structured result the AI produced — for example a risk score, a recommendation, or a classification. This is the actual output that was acted upon.
@@ -98,6 +98,16 @@ It then compares the two copies and reports one of the following:
 - **Grey dash — "Integrity unknown"**: The archived copy could not be retrieved (for example, the record may still be processing). Check again in a few minutes.
 
 The locked S3 archive is the same technology used for financial regulatory records (SEC, FINRA, HIPAA compliance). This is what you would show a regulator as proof that your records are trustworthy.
+
+**Completeness check (v0.3+, currently API-only)**
+
+Tamper-evidence proves a record that exists has not been altered. It does not prove that no record has been deleted. From v0.3, the system provides a separate completeness check that compares the per-tenant sequence counter against the records actually present and returns any missing sequence numbers. The check is available via the `/audit/verify-completeness` endpoint (or the `verify_completeness` MCP tool); a dedicated dashboard button for it is on the roadmap. For now, you can run it directly via the API:
+
+```
+curl -H "x-api-key: <your-read-key>" https://<api>/audit/verify-completeness
+```
+
+The response shows the counter, the count of records found, and the list of any missing sequence numbers. An empty `missing` array is the answer "yes, no records have been deleted." A non-empty array warrants investigation (see RUNBOOK section 13 for the triage procedure).
 
 ---
 

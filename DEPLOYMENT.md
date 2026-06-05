@@ -20,7 +20,8 @@ Think of it as three main jobs working together:
 1. **A public web address (API)** — Other companies’ systems can **send** AI decision records to you. Your dashboard or tools can **read** those records back.
 2. **A short waiting line (queue)** — When someone sends data, it is accepted quickly. The heavy work of saving it permanently happens a moment later, so the sender is not kept waiting.
 3. **A searchable index (DynamoDB)** — Records are stored in a fast database so you can list and filter them by date, customer, or event ID.
-4. **A permanent sealed vault (S3 Object Lock)** — Every record is also written to a vault where it is physically locked and cannot be altered or deleted for 7 years. This is the tamper-evidence guarantee — the same standard used for financial regulatory records.
+4. **A permanent sealed vault (S3 Object Lock)** — Every record is also written to a vault where it is physically locked and cannot be altered or deleted for 7 years. This is the tamper-evidence guarantee, the same standard used for financial regulatory records.
+5. **A per-tenant counter (TenantSequenceTable, v0.3+).** Every successfully stored record is given a number. This makes it possible to prove later that no records have been deleted: a missing number is a missing record.
 
 **In slightly more technical words (optional):** API Gateway, SQS, Lambda functions, DynamoDB, and S3 Object Lock work together. You do not need to understand each name to follow the steps below.
 
@@ -206,7 +207,7 @@ Exact commands are in the technical appendix below if you need them.
 - **Python** (`sdk\python`): Lets your developers send logs from Python code. They install it locally, point it at **IngestUrl**, and use the tenant API key.
 - **Node.js** (`sdk\nodejs`): Same idea for JavaScript/Node servers.
 
-Both libraries hash sensitive text locally before sending, so raw personal data is not uploaded to your API.
+Both libraries hash sensitive text locally before sending, so raw personal data is not uploaded to your API. From v0.3, the hashing uses HMAC-SHA256 with a secret your team generates and holds (`AUDIT_HMAC_KEY`). We never see that secret, which is what makes the hashed values legally pseudonymised rather than just fingerprinted. If the secret is not set, the libraries fall back to plain SHA-256 with a one-time deprecation warning, so existing setups keep working unchanged.
 
 ---
 
@@ -251,12 +252,21 @@ curl -s "https://YOUR_API_ID.execute-api.REGION.amazonaws.com/prod/audit/logs" ^
   -H "x-api-key: YOUR_READ_KEY"
 ```
 
-**Read history for one event:**
+**Read history for one event (tamper check):**
 
 ```bash
 curl -s "https://YOUR_API_ID.execute-api.REGION.amazonaws.com/prod/audit/events/YOUR_EVENT_ID/history" ^
   -H "x-api-key: YOUR_READ_KEY"
 ```
+
+**Verify completeness for the calling tenant (v0.3+):**
+
+```bash
+curl -s "https://YOUR_API_ID.execute-api.REGION.amazonaws.com/prod/audit/verify-completeness" ^
+  -H "x-api-key: YOUR_READ_KEY"
+```
+
+Returns the current counter, the count of records found, and the list of any missing sequence numbers. Add `?from=<n>&to=<n>` to narrow the range.
 
 ---
 
