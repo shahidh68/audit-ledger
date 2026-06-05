@@ -6,6 +6,7 @@ If your company uses AI to make or influence decisions about people — hiring, 
 
 Not just any logs. Logs that are:
 - **Tamper-evident** — someone can't quietly edit them after the fact
+- **Complete.** Someone can't quietly delete them either, and you can prove nothing has gone missing
 - **Detailed enough** to reconstruct what happened and why
 - **Private enough** to not become a GDPR liability in themselves
 
@@ -32,14 +33,16 @@ We provide a simple API your engineers integrate in hours. When your AI makes a 
 
 **What gets stored:**
 - Which AI model made the decision, and which version
-- A hash of the input (not the raw input — so no personal data leaves your system)
+- A keyed hash of the input (not the raw input, so no personal data leaves your system; the hash is computed with a secret you hold so even we cannot reverse it)
 - The structured decision output
 - Whether a human reviewed it
 - A timestamp that can't be backdated
+- A per-tenant sequence number that makes any missing record visible as a gap
 
 **What you get back:**
 - A tamper-evident audit trail you can show a regulator
-- Revision history for every record — proof nothing was changed
+- Proof that no records have been altered (per-record integrity check)
+- Proof that no records have been deleted (per-tenant completeness check)
 - A read API your compliance team can query without asking engineering
 
 ---
@@ -61,19 +64,19 @@ If a regulator knocked on your door tomorrow and asked *"show us how your AI mad
 Your AI system
      │
      ▼
-Hash sensitive inputs locally  ← personal data never leaves you
+Hash sensitive inputs locally    ← keyed with your secret; we cannot reverse it
      │
      ▼
-Send decision record to our API  (takes ~50ms, non-blocking)
+Send decision record to our API  (takes ~80ms, non-blocking)
      │
      ▼
-Stored in cryptographic ledger  ← tamper-evident, revision history intact
-     │
+Stored in cryptographic ledger   ← tamper-evident; per-tenant sequence numbers
+     │                             let you prove nothing was deleted either
      ▼
 Query anytime via read API or dashboard
 ```
 
-Integration takes a developer **less than a day** using our Python or Node.js SDK.
+Integration takes a developer **less than a day** using our Python SDK, Node.js SDK, or the MCP server (which works zero-config with Claude Desktop, Cursor, or LangGraph).
 
 ---
 
