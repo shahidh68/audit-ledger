@@ -17,6 +17,9 @@ This is the day-to-day operations guide for managing the live system. Every proc
 9. [Troubleshooting](#9-troubleshooting)
 10. [Key information to keep safe](#10-key-information-to-keep-safe)
 11. [Emergency contacts](#11-emergency-contacts)
+12. [The customer's HMAC key — what it is and how to support them](#12-the-customers-hmac-key--what-it-is-and-how-to-support-them)
+13. [Investigating a completeness gap](#13-investigating-a-completeness-gap)
+14. [Understanding `sequence_burned` log entries](#14-understanding-sequence_burned-log-entries)
 
 ---
 
@@ -75,6 +78,7 @@ Send them the following in a secure message (not plain email if possible):
 - Their **API key** (the one you generated in Step 1)
 - Your **Ingest URL** — find this in AWS Console → CloudFormation → AiAuditLedgerStack → Outputs → IngestUrl
 - The SDK folder from the project (`sdk/python` or `sdk/nodejs`) so their developers can integrate
+- A note pointing them at **Section 12** of this runbook, which explains the HMAC key they need to generate on their side. You do not generate that key for them. It is the one secret they must hold themselves so the ledger never sees something that could be linked back to a real person.
 
 ---
 
@@ -99,6 +103,8 @@ Their key stops working immediately. Their existing records remain safely stored
 ## 3. Rotating a customer's key
 
 Do this if a customer believes their key has been leaked or compromised.
+
+> **Note:** This procedure rotates the **API write key** (and equivalently the read key) that the customer uses to authenticate against the ledger API. It does **not** cover their **HMAC key** (`AUDIT_HMAC_KEY`), which the customer generates and holds themselves. If a customer asks you to rotate their HMAC key, send them to Section 12 — that one is their responsibility, not yours, because you never see it.
 
 1. Go to **passwordsgenerator.net** and generate a new 32-character key (same as Step 1 above)
 2. Go to **AWS Console → Secrets Manager → TenantKeyMap → Retrieve secret value → Edit**
@@ -509,3 +515,141 @@ Store all of the following in a password manager. Never share these in plain ema
 | Unexpected AWS bill spike | — | Go to **Billing → Cost Explorer**, identify the source, contact AWS support if needed |
 | Technical issue you cannot resolve | Developer | Share the exact error message from CloudWatch logs |
 | Need AWS support | AWS | AWS Console → Support → Create case |
+
+---
+
+## 12. The customer's HMAC key — what it is and how to support them
+
+Do this when onboarding a customer or fielding a question about PII hashing. The HMAC key is the one credential in the whole system that **you do not hold, see, store, or back up**. That is intentional.
+
+**Why a customer-held key matters**
+
+When a customer's application logs an AI decision, it sends a digest of the input data instead of the raw text. The v0.2 version of the system used plain SHA-256 for that digest. A plain SHA-256 hash of a low-entropy value like a name, email, or National Insurance number can be reversed in seconds by anyone with a wordlist, because the search space is small. The ICO and EDPB both treat the resulting digest as still personal data when the operator can reverse it.
+
+The v0.3 design uses HMAC-SHA256 with a secret key the customer generates and keeps. The digest is mathematically not reversible by anyone who does not hold the key. Because the customer holds the key and you do not, the digest is not personal data on your side of the wire. That is what makes the GDPR pseudonymisation claim defensible to a regulator.
+
+---
+
+**What the customer is supposed to do**
+
+When you send them their API key and the SDK folder (Section 1, Step 4), point them at this procedure. Their developer or operator runs this once and stores the result alongside their existing API key.
+
+**Step 1 — Generate a 32-byte secret on their own machine**
+
+```
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
+
+Python equivalent:
+
+```
+python -c "import secrets; print(secrets.token_hex(32))"
+```
+
+Either prints a 64-character hex string.
+
+**Step 2 — Store it next to AUDIT_WRITE_KEY**
+
+In their `.env` file, secrets manager, vault, or whatever they already use for `AUDIT_WRITE_KEY`. The variable name the SDK and MCP server look for is `AUDIT_HMAC_KEY`.
+
+**Step 3 — Confirm it is being used**
+
+When the SDK or MCP server starts and the variable is set, no warning is printed. When it is **not** set, a one-time deprecation warning is printed on stderr the first time a hash is computed. The presence or absence of that warning is how the customer (and you, if you are helping them) confirm which path is active.
+
+---
+
+**Common questions**
+
+| Question | Answer |
+|---|---|
+| Can you generate the key for them? | No. Generating it means you held it at some point, which defeats the regulatory claim. They generate. |
+| What if they lose the key? | New hashes computed with a new key are fingerprints of the same person but a different value. Existing records remain valid for integrity verification — the ledger compares digests, it does not reverse them. PII lookup across the rotation boundary requires keeping the old key around. |
+| Can you tell them what their key is? | No. You never saw it. If they lost it and have no backup, they generate a new one and accept the rotation tradeoff above. |
+| What if they refuse to set one? | The SDK and MCP fall back to plain SHA-256 with a one-time deprecation warning. Their integration keeps working. Their digests are weaker than they should be. Their problem, not yours. Note it on the engagement. |
+| Should you rotate the key on their behalf? | No. Rotation is theirs. If you ever rotate it for them you were holding it, which defeats the point. |
+| Where in the SDK does the key get used? | `sdk/python/ai_audit_ledger/hashing.py` and `sdk/nodejs/src/hashing.mjs` read `AUDIT_HMAC_KEY` from the environment at hash time. It never appears in any outgoing HTTP request. |
+
+---
+
+## 13. Investigating a completeness gap
+
+Do this when a customer's `verify_completeness` call returns a non-empty `missing` array.
+
+`verify_completeness` compares the per-tenant sequence counter against the rows actually present in the audit table. A number in the `missing` array means one of three things:
+
+1. A record was **never written** because of a true race during SQS redelivery. Sequence allocated, audit row never landed. The processor logs this case with `event: "sequence_burned"`. See Section 14.
+2. A record **was written but later deleted** from DynamoDB by a misconfigured process or operator action. S3 Object Lock means the original copy still exists.
+3. A record **was written but failed to apply its sequence_no** in a partially-failed processor invocation (rare, would also show in CloudWatch with a stack trace).
+
+---
+
+**Step 1 — Triage with the CloudWatch metric filter**
+
+1. Go to **AWS Console → CloudWatch → Logs → Log groups**
+2. Open the ProcessorFn log group (`AiAuditLedgerStack-ProcessorFnLogGroup...`)
+3. Click **Search log group**
+4. Search for `sequence_burned` and filter to the time window when the missing numbers were allocated
+5. Cross-reference the `burned_seq` value in each hit against the `missing` array
+
+If every missing number shows up as a `sequence_burned` log entry, the gap is benign infrastructure noise and the customer's records are intact. Reply explaining this and point at the burned-sequence log entries as evidence.
+
+---
+
+**Step 2 — If some missing numbers are not burned, check S3**
+
+If a missing number is not in the burned list, the record may still exist in the S3 archive (which Object Lock makes undeletable). Look for it:
+
+1. Go to **AWS Console → S3** and open the audit bucket (CloudFormation → AuditBucketName output)
+2. Browse to the customer's tenant prefix
+3. The objects there are keyed by `event_id`, not `sequence_no` — without the `event_id` you cannot directly find the missing record
+
+If the customer can tell you what `event_id` they expected at that sequence, fetch the S3 object and confirm it exists. If it does, the record was deleted from DynamoDB and needs investigation as a possible insider or misconfiguration event. Treat as a serious incident.
+
+---
+
+**Step 3 — Restore from S3 if the customer needs the DynamoDB row back**
+
+The `RestoreApprovalTable` and `RestoreFn` were built for exactly this. The reconciler will auto-detect mismatches at next run (typically nightly). If the customer needs faster recovery, manually invoke the restore handler with the `event_id` and tenant. The restored row is re-stamped with the original `sequence_no` from the S3 archive so the gap closes.
+
+---
+
+## 14. Understanding `sequence_burned` log entries
+
+Do this any time you see a `sequence_burned` log line in the ProcessorFn log group, or when investigating a completeness gap (Section 13).
+
+A `sequence_burned` log line looks like this:
+
+```
+{"event":"sequence_burned","tenant_id":"acme-hr","event_id":"40925451-...","burned_seq":47,"reason":"concurrent_write_race"}
+```
+
+**What it means**
+
+The processor allocated sequence number 47, then tried to write the audit row, then DynamoDB rejected the write because another processor invocation had already written the same row. The number 47 is now permanently unused. Sequence 48 will go to the next successful write.
+
+**Why this happens**
+
+SQS occasionally redelivers a message before the previous invocation's visibility timeout expires. The pre-flight check on `event_id-index` catches most of these cases by skipping the write entirely. A `sequence_burned` happens when the pre-flight check missed (eventually-consistent GSI returned stale data) but the conditional PutItem caught it.
+
+**Should you do anything about it?**
+
+If you see one or two per week per tenant, no action needed. This is normal SQS behaviour and the gap is harmless — the customer's records are intact. Mention it if they ask, otherwise ignore.
+
+If you see ten or more per day per tenant, that is unusual. Possible causes:
+
+- Increased downstream latency causing visibility timeouts to expire mid-write. Check ProcessorFn duration metrics.
+- Manual SQS message replays. Check who has access and what they were doing.
+- DynamoDB throttling on the audit table. Check the AuditTable read/write capacity dashboards.
+
+**How to filter for them at scale**
+
+In CloudWatch Logs Insights against the ProcessorFn log group:
+
+```
+fields @timestamp, tenant_id, event_id, burned_seq
+| filter event = "sequence_burned"
+| stats count() by tenant_id
+| sort count() desc
+```
+
+That gives you a per-tenant burn rate for the time range. Healthy is single-digit per day or less.

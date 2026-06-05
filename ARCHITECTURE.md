@@ -244,6 +244,26 @@ Purpose: direct lookup by event ID without knowing the tenant. Used by the histo
 
 ---
 
+### DynamoDB: TenantSequenceTable
+
+| Property | Value |
+|---|---|
+| Billing | PAY_PER_REQUEST |
+| Partition key | `tenant_id` (String) |
+| Attributes | `current_sequence` (Number), `updated_at` (String, ISO 8601) |
+| Point-in-time recovery | Enabled |
+| Removal policy | RETAIN |
+
+**Item shape:** `{ tenant_id, current_sequence: <integer>, updated_at: <ISO timestamp> }`
+
+**How sequence allocation works:** Each successful audit record receives a per-tenant monotonic `sequence_no`. The processor atomically increments `current_sequence` via `UpdateItem` with `ADD current_sequence :one` and `ReturnValues: 'UPDATED_NEW'`, then stamps the returned value onto the audit row before writing to DynamoDB and S3. The read Lambda inspects this table (read-only) when answering `verify_completeness` without an explicit upper bound, to know the highest sequence number that should exist.
+
+**Why RETAIN:** Losing this counter would reset future allocations to 1 and create spurious gaps the verify-completeness endpoint would report as missing records. RETAIN ensures a stack teardown does not destroy it; point-in-time recovery covers accidental in-place damage.
+
+**Why a separate table rather than reusing AuditTable:** The counter is a different access pattern (atomic increment per tenant) and a different semantic concern (allocation, not storage). Mixing it with audit data would muddy IAM scoping — only the processor writes here, but everything writes to AuditTable.
+
+---
+
 ### DynamoDB: RateLimitTable
 
 | Property | Value |
@@ -312,6 +332,24 @@ Two secrets, both with `RETAIN` removal policy:
 - The API stores hashes, decision outputs, and metadata, not raw personal data
 - This supports GDPR data minimisation obligations and aligns with ICO/EDPB expectations for pseudonymisation rather than plain unsalted hashing
 
+#### The HMAC key flow (who generates, who holds, what travels)
+
+The PII hashing design relies on a single principle: the secret used to compute the hash must be held by the tenant, not by the ledger operator. If the operator held the key, the operator could reverse the hash, and the digest would still be personal data under ICO/EDPB guidance. Putting the key in the tenant's environment is what changes the legal characterisation of the digest from "fingerprint of personal data" to "pseudonymised value."
+
+The lifecycle has four steps:
+
+1. **Generation.** The tenant's operator runs a one-time command on their own machine to produce a 32-byte random secret. The SDKs ship with the recommended commands (`node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` or `python -c "import secrets; print(secrets.token_hex(32))"`). The ledger operator is not involved.
+
+2. **Storage.** The tenant stores the secret wherever they already keep `AUDIT_WRITE_KEY`: an environment variable, a `.env` file under restricted permissions, AWS Secrets Manager, HashiCorp Vault, or equivalent. The variable name the SDK and the MCP server read is `AUDIT_HMAC_KEY`. The secret never leaves the tenant's infrastructure.
+
+3. **Hashing at the SDK or MCP.** When a tenant application calls `record_decision`, the SDK or MCP reads `AUDIT_HMAC_KEY` from the environment and computes `HMAC-SHA256(key, raw_pii)` to produce a 64-character hex digest. That digest is what becomes `input_data_hash` and `system_prompt_hash` in the outgoing payload. The raw PII and the key both stay in the tenant's process memory and are never serialised into a request.
+
+4. **Storage and verification at the ledger.** The ledger stores the digest in both DynamoDB and S3 Object Lock. Tamper verification compares the two stored copies of the digest and does not need the key. The ledger cannot reverse the digest because it has never seen the key.
+
+The fallback path exists for backwards compatibility with the v0.2 plain-SHA-256 behaviour. If `AUDIT_HMAC_KEY` is not set, the SDKs and the MCP fall back to plain SHA-256 and emit a one-time deprecation warning. Existing integrations keep working unchanged but lose the regulatory characterisation. The warning makes the silent downgrade observable.
+
+The rotation tradeoff is real and worth being explicit about. Forward-only rotation is fine for tamper verification because the ledger compares stored digests against stored digests. It does not work for searching across the rotation boundary using the same PII value, because that value now hashes to a different digest under the new key. Tenants who need historical PII lookups keep the old key alongside the new one and search with both. There is no scheme inside the ledger that re-keys old hashes, by design — re-keying would require the ledger operator to know either the old or new key, which would defeat the property the change is meant to preserve.
+
 ### Immutability
 
 - Every record is written to S3 with Object Lock COMPLIANCE mode
@@ -344,8 +382,11 @@ Two secrets, both with `RETAIN` removal policy:
    g. Return 202 Accepted
 5. SQS delivers batch to Processor Lambda
 6. Processor Lambda:
-   a. PutItem to DynamoDB (sk = timestamp#event_id, idempotent condition)
-   b. PutObject to S3 with COMPLIANCE lock and retention date
+   a. Pre-flight Query on event_id-index — skip if event already stored with sequence_no (SQS redelivery idempotency)
+   b. UpdateItem on TenantSequenceTable — atomically allocate next sequence_no for tenant
+   c. PutItem to DynamoDB with sequence_no included, idempotent condition on sk
+      - On ConditionalCheckFailed (rare race): log sequence_burned event, abort, do not write S3
+   d. PutObject to S3 with COMPLIANCE lock and retention date, sequence_no embedded in JSON body
 ```
 
 ### Read path (list)
@@ -377,6 +418,23 @@ Two secrets, both with `RETAIN` removal policy:
    g. Return both records + integrity note
 ```
 
+### Read path (completeness check)
+
+```
+1. GET /audit/verify-completeness?from=<seq>&to=<seq>
+2. API Gateway → Read Lambda
+3. Read Lambda:
+   a. Validate read key, resolve tenant_id
+   b. Query DynamoDB PK=tenant_id, projection on sequence_no only
+      - Paginates if tenant has many records
+   c. GetItem on TenantSequenceTable for current counter value
+   d. resolveRange clamps from/to to [1, counter]
+   e. computeCompleteness returns missing sequence numbers
+   f. Return { tenant_id, range, expected_count, found_count, missing, note }
+```
+
+This path is what answers the regulatory question "can you prove the log is complete?" Tamper-checking answers "is this record unchanged?" — completeness checking answers "is every record we expected actually present?" The two together cover both the alteration and the omission failure modes.
+
 ---
 
 ## 5. Payload schema
@@ -388,8 +446,8 @@ Two secrets, both with `RETAIN` removal policy:
 | `event_id` | string | UUID v4 |
 | `timestamp` | string | ISO 8601 |
 | `model_version` | string | Non-empty |
-| `system_prompt_hash` | string | SHA-256 hex (64 chars) |
-| `input_data_hash` | string | SHA-256 hex (64 chars) |
+| `system_prompt_hash` | string | 64-char hex digest. HMAC-SHA256 keyed off the tenant's `AUDIT_HMAC_KEY`; falls back to plain SHA-256 if unset (back-compat) |
+| `input_data_hash` | string | 64-char hex digest. HMAC-SHA256 keyed off the tenant's `AUDIT_HMAC_KEY`; falls back to plain SHA-256 if unset (back-compat) |
 | `ai_decision_output` | object | Non-null, non-array JSON object |
 | `human_in_loop` | boolean | Strict boolean |
 
@@ -397,7 +455,7 @@ Fields added by the ingest Lambda before enqueuing: `tenant_id`, `_ingested_at` 
 
 ### Stored document (DynamoDB + S3)
 
-All ingest fields plus `tenant_id`. The `sk` field (`{timestamp}#{event_id}`) is stored in DynamoDB only and stripped from API responses.
+All ingest fields plus `tenant_id` and `sequence_no` (assigned by the processor). The `sk` field (`{timestamp}#{event_id}`) is stored in DynamoDB only and stripped from API responses. `sequence_no` is stored in both DynamoDB and the S3 archive copy so a restore from S3 preserves the original per-tenant ordering.
 
 ---
 
