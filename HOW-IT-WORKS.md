@@ -146,7 +146,7 @@ await client.logEvent({
 ## Frequently asked questions
 
 **Does our personal data leave our systems?**
-No. The SDK hashes sensitive inputs on your side before sending anything. We receive a mathematical fingerprint, not the original content. Names, CVs, and identifiers stay with you.
+No. The SDK hashes sensitive inputs on your side before sending anything. We receive a keyed fingerprint (HMAC-SHA256 with a secret you hold), not the original content. Because the key never leaves your environment, the fingerprint is not reversible by us or anyone else without that key. Names, CVs, and identifiers stay with you.
 
 **What happens if your service goes down?**
 The ingest API uses a queue — if there is a temporary disruption, records are held and processed automatically when the service recovers. No records are lost.

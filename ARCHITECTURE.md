@@ -308,9 +308,9 @@ Two secrets, both with `RETAIN` removal policy:
 
 ### Data minimisation
 
-- Raw PII (names, CVs, identifiers) should be hashed by the SDK before sending
-- The API stores hashes, decision outputs, and metadata — not raw personal data
-- This supports GDPR data minimisation obligations
+- Raw PII (names, CVs, identifiers) is hashed by the SDK before sending. By default the SDK uses HMAC-SHA256 keyed off a per-tenant secret (`AUDIT_HMAC_KEY`) held in the tenant's environment, so the digest is not reversible without that key
+- The API stores hashes, decision outputs, and metadata, not raw personal data
+- This supports GDPR data minimisation obligations and aligns with ICO/EDPB expectations for pseudonymisation rather than plain unsalted hashing
 
 ### Immutability
 

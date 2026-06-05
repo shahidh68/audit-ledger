@@ -158,8 +158,8 @@ x-api-key: YOUR_API_KEY
   "event_id": "550e8400-e29b-41d4-a716-446655440000",
   "timestamp": "2026-04-14T10:00:00Z",
   "model_version": "gpt-4o",
-  "system_prompt_hash": "sha256 hex of the system prompt",
-  "input_data_hash": "sha256 hex of the input data",
+  "system_prompt_hash": "64-char hex digest of the system prompt (HMAC-SHA256 keyed off AUDIT_HMAC_KEY; plain SHA-256 if unset)",
+  "input_data_hash": "64-char hex digest of the input data (HMAC-SHA256 keyed off AUDIT_HMAC_KEY; plain SHA-256 if unset)",
   "ai_decision_output": { "decision": "approved", "score": 87 },
   "human_in_loop": false
 }
@@ -361,14 +361,14 @@ Send the exact same request again (same `event_id`). You should receive `409 Con
 | `event_id` | string | Yes | Unique identifier you generate (UUID v4 recommended) |
 | `timestamp` | string (ISO 8601) | Yes | When the AI decision occurred — `2026-04-14T10:00:00Z` |
 | `model_version` | string | Yes | The AI model that made the decision — e.g. `gpt-4o`, `claude-3-5-sonnet` |
-| `system_prompt_hash` | string | Yes | SHA-256 hex digest of the system prompt used. 64 characters. |
-| `input_data_hash` | string | Yes | SHA-256 hex digest of the input data passed to the model. 64 characters. |
+| `system_prompt_hash` | string | Yes | 64-char hex digest of the system prompt. HMAC-SHA256 keyed off your local `AUDIT_HMAC_KEY`; plain SHA-256 if unset (back-compat). |
+| `input_data_hash` | string | Yes | 64-char hex digest of the input data passed to the model. HMAC-SHA256 keyed off your local `AUDIT_HMAC_KEY`; plain SHA-256 if unset (back-compat). |
 | `ai_decision_output` | object | Yes | The decision or output of the model. Any JSON object. |
 | `human_in_loop` | boolean | Yes | Whether a human reviewed this decision before it was acted on |
 | `metadata` | object | No | Any additional context you want to store — free-form JSON |
 
 **Notes:**
-- Hash fields must be exactly 64 lowercase hexadecimal characters (SHA-256)
+- Hash fields must be exactly 64 lowercase hexadecimal characters. Use HMAC-SHA256 with a tenant-local key (`AUDIT_HMAC_KEY`) so the hash is not reversible without your key. The SDKs and example code below do this for you.
 - Do not include your raw API key or any personal data in the payload
 - The `ai_decision_output` field can be any valid JSON object — there is no schema restriction
 
@@ -406,15 +406,25 @@ In production, set these through your platform's secret management — AWS Secre
 import os
 import uuid
 import hashlib
+import hmac
 from datetime import datetime, timezone
 import httpx  # pip install httpx
 
 INGEST_URL = os.environ["AUDIT_INGEST_URL"]
 BASE_URL   = os.environ["AUDIT_BASE_URL"]
 API_KEY    = os.environ["AUDIT_API_KEY"]
+# Tenant-held secret; never sent to the API. Generate once and store
+# next to AUDIT_API_KEY. If unset, the example falls back to plain SHA-256
+# for backwards compatibility.
+HMAC_KEY   = os.environ.get("AUDIT_HMAC_KEY", "").encode("utf-8")
 
 def hash_text(text: str) -> str:
-    return hashlib.sha256(text.encode()).hexdigest()
+    data = text.encode("utf-8")
+    if HMAC_KEY:
+        return hmac.new(HMAC_KEY, data, hashlib.sha256).hexdigest()
+    # Back-compat fallback. Plain SHA-256 of low-entropy values is
+    # brute-forceable; set AUDIT_HMAC_KEY to switch to keyed hashing.
+    return hashlib.sha256(data).hexdigest()
 
 def send_audit_event(model_version: str, system_prompt: str, input_data: str, decision: dict, human_in_loop: bool) -> str:
     event_id = str(uuid.uuid4())
@@ -455,9 +465,18 @@ import crypto from 'crypto';
 const INGEST_URL = process.env.AUDIT_INGEST_URL;
 const BASE_URL   = process.env.AUDIT_BASE_URL;
 const API_KEY    = process.env.AUDIT_API_KEY;
+// Tenant-held secret; never sent to the API. Generate once and store next
+// to AUDIT_API_KEY. If unset, the example falls back to plain SHA-256 for
+// backwards compatibility.
+const HMAC_KEY   = process.env.AUDIT_HMAC_KEY ?? '';
 
 function hashText(text) {
-  return crypto.createHash('sha256').update(text).digest('hex');
+  if (HMAC_KEY) {
+    return crypto.createHmac('sha256', HMAC_KEY).update(text, 'utf8').digest('hex');
+  }
+  // Back-compat fallback. Plain SHA-256 of low-entropy values is
+  // brute-forceable; set AUDIT_HMAC_KEY to switch to keyed hashing.
+  return crypto.createHash('sha256').update(text, 'utf8').digest('hex');
 }
 
 async function sendAuditEvent({ modelVersion, systemPrompt, inputData, decision, humanInLoop }) {

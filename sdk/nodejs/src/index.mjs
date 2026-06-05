@@ -134,3 +134,4 @@ export function scheduleLogDecision(args) {
 }
 
 export { hashPii, hashPrompt };
+export { verifyCompleteness } from './readApi.mjs';

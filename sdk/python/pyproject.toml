@@ -1,7 +1,7 @@
 [project]
 name = "ai-audit-ledger"
 version = "0.1.0"
-description = "AI Audit Ledger Python SDK — local SHA-256 + async ingest"
+description = "AI Audit Ledger Python SDK with local HMAC-SHA256 PII hashing and async ingest"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [

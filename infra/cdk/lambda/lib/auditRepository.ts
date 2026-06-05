@@ -82,6 +82,49 @@ export async function findEventById(
   return result.Items?.length ? unmarshall(result.Items[0]) : null;
 }
 
+/**
+ * Page through a tenant's partition and return only the `sequence_no` values
+ * for every record, projecting nothing else so the payload stays small even
+ * for tenants with tens of thousands of events.
+ *
+ * Used by verify-completeness to detect gaps. The full scan of a tenant's
+ * partition is acceptable for v0.3 sandbox volumes; for high-volume tenants,
+ * a future GSI on (tenant_id, sequence_no) would let the query be bounded
+ * by the `from`/`to` range directly. Not adding that GSI yet — pay-per-write
+ * cost is hard to justify until a tenant actually hits the latency cliff.
+ */
+export async function listTenantSequenceNumbers(
+  tableName: string,
+  tenantId: string,
+): Promise<number[]> {
+  const sequences: number[] = [];
+  let exclusiveStartKey: Record<string, unknown> | undefined;
+
+  do {
+    const result = await dynamo.send(new QueryCommand({
+      TableName:              tableName,
+      KeyConditionExpression: 'tenant_id = :tid',
+      ExpressionAttributeValues: { ':tid': { S: tenantId } },
+      // ProjectionExpression keeps the payload tiny. sequence_no is a reserved
+      // word in DynamoDB; aliasing via ExpressionAttributeNames.
+      ProjectionExpression:      '#seq',
+      ExpressionAttributeNames:  { '#seq': 'sequence_no' },
+      ExclusiveStartKey:         exclusiveStartKey as never,
+    }));
+
+    for (const item of result.Items ?? []) {
+      const raw = item.sequence_no?.N;
+      if (raw === undefined) continue; // pre-v0.3 records that never got a sequence
+      const value = Number(raw);
+      if (Number.isInteger(value)) sequences.push(value);
+    }
+
+    exclusiveStartKey = result.LastEvaluatedKey as Record<string, unknown> | undefined;
+  } while (exclusiveStartKey);
+
+  return sequences;
+}
+
 export interface ArchivedRecordResult {
   record: Record<string, unknown> | null;
   /** Human-readable note; empty string when the fetch succeeded. */

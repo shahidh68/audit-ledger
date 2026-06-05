@@ -19,14 +19,18 @@ import {
   scanAllEvents,
   findEventById,
   fetchArchivedRecord,
+  listTenantSequenceNumbers,
 } from './lib/auditRepository';
+import { readCurrentSequence } from './lib/sequenceAllocator';
+import { computeCompleteness } from './lib/completeness';
 
 const readKeyCache = createKeyCache('READ_KEY_SECRET_ARN');
 
 // ── Handler ───────────────────────────────────────────────────────────────────
 export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
-  const tableName  = process.env.AUDIT_TABLE;
-  const bucketName = process.env.AUDIT_BUCKET;
+  const tableName         = process.env.AUDIT_TABLE;
+  const bucketName        = process.env.AUDIT_BUCKET;
+  const sequenceTableName = process.env.TENANT_SEQUENCE_TABLE;
   if (!tableName || !bucketName) return json(500, { error: 'Server misconfiguration' });
 
   // ── Auth ──────────────────────────────────────────────────────────────────
@@ -43,11 +47,19 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
   if (!callerTenantId) return json(401, { error: 'Invalid read API key' });
 
   // ── Route ─────────────────────────────────────────────────────────────────
-  const isAdmin   = callerTenantId === '*';
-  const eventId   = event.pathParameters?.eventId;
-  const isHistory = Boolean(eventId) && /\/history\/?$/.test(event.path ?? '');
+  const isAdmin         = callerTenantId === '*';
+  const eventId         = event.pathParameters?.eventId;
+  const path            = event.path ?? '';
+  const isHistory       = Boolean(eventId) && /\/history\/?$/.test(path);
+  const isCompleteness  = /\/verify-completeness\/?$/.test(path);
 
   try {
+    if (isCompleteness) {
+      if (!sequenceTableName) {
+        return json(500, { error: 'Server misconfiguration: sequence table not bound' });
+      }
+      return await handleCompleteness(event, callerTenantId, isAdmin, tableName, sequenceTableName);
+    }
     if (isHistory && eventId) {
       return await handleHistory(eventId, callerTenantId, isAdmin, tableName, bucketName);
     }
@@ -131,4 +143,59 @@ async function handleHistory(
     current_record:     dbRecord,
     archived_record:    s3Record,
   });
+}
+
+// ── Completeness check ───────────────────────────────────────────────────────
+// Returns the list of sequence numbers that were issued but are no longer
+// present in DynamoDB. Each gap is a record that was either deleted, never
+// fully stored (race during SQS redelivery), or lost in flight. Combined
+// with the burned_sequence log entries from the processor, the operator
+// can tell the three apart.
+async function handleCompleteness(
+  event: APIGatewayProxyEvent,
+  callerTenantId: string,
+  isAdmin: boolean,
+  tableName: string,
+  sequenceTableName: string,
+): Promise<APIGatewayProxyResult> {
+  // For now, completeness is tenant-scoped only. An admin caller must
+  // pass ?tenant_id=<id> explicitly so they cannot accidentally trigger
+  // a full-fleet sweep.
+  const requestedTenantId = event.queryStringParameters?.tenant_id;
+  const targetTenantId = isAdmin
+    ? (requestedTenantId ?? '').trim()
+    : callerTenantId;
+
+  if (isAdmin && !targetTenantId) {
+    return json(400, {
+      error: 'Admin callers must specify ?tenant_id=<id> on verify-completeness',
+    });
+  }
+
+  const fromParam = parsePositiveInt(event.queryStringParameters?.from);
+  const toParam   = parsePositiveInt(event.queryStringParameters?.to);
+
+  const [presentSequences, currentCounter] = await Promise.all([
+    listTenantSequenceNumbers(tableName, targetTenantId),
+    readCurrentSequence(sequenceTableName, targetTenantId),
+  ]);
+
+  const report = computeCompleteness({
+    presentSequences,
+    currentCounter,
+    fromParam,
+    toParam,
+  });
+
+  return json(200, {
+    tenant_id: targetTenantId,
+    ...report,
+  });
+}
+
+function parsePositiveInt(raw: string | undefined): number | undefined {
+  if (!raw) return undefined;
+  const n = parseInt(raw, 10);
+  if (!Number.isFinite(n) || n < 1) return undefined;
+  return n;
 }
