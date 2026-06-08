@@ -1573,20 +1573,41 @@
       return;
     }
 
+    const tenant  = String(data.tenant_id ?? '—');
     const missing = data.missing ?? [];
-    const clean   = missing.length === 0;
-    const colour  = clean ? 'var(--success)' : 'var(--clay)';
-    const bg      = clean ? 'var(--success-lt)' : 'rgba(225,29,72,0.10)';
-    const sample  = missing.slice(0, 50).join(', ') + (missing.length > 50 ? ' …' : '');
+    // expected_count === 0 means there are no *sequence-numbered* records to
+    // check — either the tenant is genuinely empty, or its events predate
+    // sequence tracking (v0.3). Gap detection cannot run, so this is NOT a
+    // clean pass: show a neutral "can't verify" state, never green success.
+    const unverifiable = (data.expected_count ?? 0) === 0;
+    const clean        = !unverifiable && missing.length === 0;
+
+    let colour, bg, title, extra = '';
+    if (unverifiable) {
+      colour = 'var(--gold)'; bg = 'rgba(251,191,36,0.10)';
+      title  = '⚠ Completeness can’t be verified';
+      const shown = (typeof allRows !== 'undefined' ? allRows : []).filter(r => r.tenant_id === tenant).length;
+      extra = `<div style="margin-top:6px;color:var(--ink-3);font-size:12.5px">${shown > 0
+        ? `${shown} record${shown === 1 ? '' : 's'} are shown for this tenant, but they carry no sequence numbers — they predate sequence tracking (v0.3), so deletions can’t be detected. Records created from v0.3 onward verify automatically.`
+        : 'No sequence-numbered records exist for this tenant yet.'}</div>`;
+    } else if (clean) {
+      colour = 'var(--success)'; bg = 'var(--success-lt)';
+      title  = '✓ No deleted records detected';
+    } else {
+      colour = 'var(--clay)'; bg = 'rgba(225,29,72,0.10)';
+      title  = `✗ ${missing.length} record(s) missing`;
+      const sample = missing.slice(0, 50).join(', ') + (missing.length > 50 ? ' …' : '');
+      extra = `<div style="margin-top:6px;color:var(--ink-3);font-size:12.5px">Missing sequence #: <code style="font-family:var(--font-mono)">${esc(sample)}</code></div>`;
+    }
 
     out.innerHTML = `<div style="padding:14px;border-radius:6px;border:1px solid ${colour};background:${bg}">
       ${close}
-      <strong style="color:${colour}">${clean ? '✓ No deleted records detected' : `✗ ${missing.length} record(s) missing`}</strong>
+      <strong style="color:${colour}">${title}</strong>
       <div style="margin-top:6px;color:var(--ink-3);font-size:12.5px">
-        Tenant <code style="font-family:var(--font-mono)">${esc(String(data.tenant_id ?? '—'))}</code>
+        Tenant <code style="font-family:var(--font-mono)">${esc(tenant)}</code>
         · expected ${data.expected_count ?? '—'} · found ${data.found_count ?? '—'}${data.range ? ` · range ${data.range.from}–${data.range.to}` : ''}
       </div>
-      ${clean ? '' : `<div style="margin-top:6px;color:var(--ink-3);font-size:12.5px">Missing sequence #: <code style="font-family:var(--font-mono)">${esc(sample)}</code></div>`}
+      ${extra}
       <div style="margin-top:8px;color:var(--ink-3);font-size:12.5px;line-height:1.45">${esc(String(data.note ?? ''))}</div>
     </div>`;
   }
