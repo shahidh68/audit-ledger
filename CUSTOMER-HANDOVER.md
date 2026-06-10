@@ -4,6 +4,8 @@ What to give the customer when they take over operation of their own deployed au
 
 Read this alongside `RUNBOOK.md` (day-to-day operations), `ARCHITECTURE.md` (technical reference), and `DEPLOYMENT.md` (first-deploy walkthrough). This document is the inventory of what must change hands, not the procedures themselves.
 
+> **Companion product — AI Decision Evidence Hub.** Many deployments also run the [Evidence Hub](https://github.com/shahidh68/evidence-hub), the read-only audit-readiness layer above this ledger (what evidence each decision has, what's missing, who owns each gap, and exportable audit packs — serverless on AWS Lambda + DynamoDB). It hands over separately via its own [Customer Guide](https://github.com/shahidh68/evidence-hub/blob/master/docs/CUSTOMER-GUIDE.md) and [Admin Runbook](https://github.com/shahidh68/evidence-hub/blob/master/docs/ADMIN-RUNBOOK.md). The two dashboards cross-link to each other.
+
 ---
 
 ## Contents

@@ -14,6 +14,13 @@ This dashboard lets you:
 - **Verify** that a record has never been altered (revision history)
 - **Export** records to a spreadsheet for regulators or auditors
 
+> **Companion: the Evidence Hub.** This dashboard shows *what was decided and that
+> the record is intact*. The **"Evidence Hub ↗"** link (on the connect screen and
+> in the header) opens the companion [AI Decision Evidence Hub](https://github.com/shahidh68/evidence-hub)
+> dashboard, which shows whether each decision is *audit-ready* — what supporting
+> evidence it has, what's missing, and an exportable audit pack. You'll need its
+> admin key to view data there.
+
 ---
 
 ## Opening the dashboard
