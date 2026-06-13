@@ -12,6 +12,7 @@ This dashboard lets you:
 - **Browse** those records by date
 - **Inspect** any individual decision in detail
 - **Verify** that a record has never been altered (revision history)
+- **Check** whether any record has been deleted (completeness check)
 - **Export** records to a spreadsheet for regulators or auditors
 
 > **Companion: the Evidence Hub.** This dashboard shows *what was decided and that
