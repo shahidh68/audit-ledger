@@ -128,7 +128,7 @@ End-to-end example with a real AI workflow: [apps/resume-screener](./apps/resume
 | [`sdk/nodejs/`](./sdk/nodejs) | Node.js SDK — equivalent interface, ESM |
 | [`schemas/`](./schemas) | Shared payload schemas (Python + TypeScript) |
 | [`apps/resume-screener/`](./apps/resume-screener) | Reference application — CV triage with full audit integration |
-| [`dashboard/`](./dashboard) | Compliance dashboard — browse records, run tamper-check, export CSV |
+| [`dashboard/`](./dashboard) | Compliance dashboard — browse records, run tamper-check, **detect deleted records** (completeness), export CSV |
 | [`tests/`](./tests) | Integration tests against deployed environment |
 | [`tools/`](./tools) | Operational tooling (reconciler, restore, admin contacts) |
 | [`ARCHITECTURE.md`](./ARCHITECTURE.md) | Single technical reference for the deployed system |

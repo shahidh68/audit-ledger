@@ -106,15 +106,22 @@ It then compares the two copies and reports one of the following:
 
 The locked S3 archive is the same technology used for financial regulatory records (SEC, FINRA, HIPAA compliance). This is what you would show a regulator as proof that your records are trustworthy.
 
-**Completeness check (v0.3+, currently API-only)**
+**Checking for deleted records (completeness)**
 
-Tamper-evidence proves a record that exists has not been altered. It does not prove that no record has been deleted. From v0.3, the system provides a separate completeness check that compares the per-tenant sequence counter against the records actually present and returns any missing sequence numbers. The check is available via the `/audit/verify-completeness` endpoint (or the `verify_completeness` MCP tool); a dedicated dashboard button for it is on the roadmap. For now, you can run it directly via the API:
+Tamper-evidence proves a record that *exists* has not been altered. It does not, on its own, prove that no record has been **deleted**. The dashboard handles that too.
 
-```
-curl -H "x-api-key: <your-read-key>" https://<api>/audit/verify-completeness
-```
+Click the **"Check for deleted records"** button (in the toolbar above the records table). It compares the ledger's per-tenant sequence counter against the records actually present and reports one of three results:
 
-The response shows the counter, the count of records found, and the list of any missing sequence numbers. An empty `missing` array is the answer "yes, no records have been deleted." A non-empty array warrants investigation (see RUNBOOK section 13 for the triage procedure).
+- **✓ No deleted records detected** — every sequence number is accounted for. This is the answer to "can you prove the log is complete?"
+- **✗ N record(s) missing** — one or more records have been deleted or never stored. The dashboard lists the missing sequence numbers. This warrants investigation (see RUNBOOK section 13 for the triage procedure).
+- **⚠ Completeness can't be verified** — the records shown predate sequence tracking (v0.3), so deletions can't be detected for them. Records created from v0.3 onward verify automatically.
+
+Every record's **Sequence #** is also shown in its detail view (a `—` means a pre-v0.3 record with no sequence number).
+
+> Prefer the API? The same check is available at `GET /audit/verify-completeness` (or the `verify_completeness` MCP tool):
+> ```
+> curl -H "x-api-key: <your-read-key>" https://<api>/audit/verify-completeness
+> ```
 
 ---
 
