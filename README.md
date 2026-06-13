@@ -12,7 +12,7 @@ Every AI decision your system makes is recorded once, sealed in S3 Object Lock u
 > present, what's missing, who owns each gap, a 0–100 readiness score, and exportable audit
 > packs. Also serverless on AWS (Lambda + DynamoDB). Together they're the
 > **AI Audit Ledger family**: [audit-ledger](https://github.com/shahidh68/audit-ledger) ·
-> [audit-ledger-mcp](https://github.com/shahidh68/audit-ledger-mcp) ·
+> [audit-ledger-mcp](https://www.npmjs.com/package/audit-ledger-mcp) ·
 > [evidence-hub](https://github.com/shahidh68/evidence-hub).
 
 **[Live demo dashboard →](https://d2pfirb2397ixy.cloudfront.net/?demo=1)** &nbsp;&middot;&nbsp; 30 synthetic decisions you can click through and verify.
