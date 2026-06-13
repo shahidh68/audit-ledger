@@ -43,6 +43,7 @@ Personal data never leaves your system. You send fingerprints, not files.
 - A dashboard your compliance team can open in a browser — no technical knowledge needed
 - Filters by date, customer, model version
 - One-click tamper-evidence check on any record — proof it has not been touched since it was created
+- One-click check for deleted records — proof that nothing has been removed from the log
 - CSV export for regulators
 
 ---

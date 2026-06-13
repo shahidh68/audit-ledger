@@ -40,7 +40,7 @@ Store both keys in a secrets manager or password manager. Never hard-code them i
 
 ## 1a. Your dashboard
 
-You have access to a hosted dashboard where you can browse, search, and verify the integrity of your audit records. This is your window into the ledger without needing any technical tools.
+You have access to a hosted dashboard where you can browse, search, verify the integrity of your audit records, and check whether any record has been deleted. This is your window into the ledger without needing any technical tools.
 
 **To access your dashboard:**
 

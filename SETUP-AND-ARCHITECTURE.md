@@ -14,7 +14,7 @@ This document explains **how the system is set up** (what exists, where it lives
 2. A **fast intake lane** (ingest Lambda + queue) so customers get a quick "yes, received" answer while saving is finished in the background.
 3. A **searchable index** (DynamoDB) for listing and filtering records by date, tenant, or event ID.
 4. A **permanent sealed vault** (S3 with Object Lock) where every record is locked and cannot be modified or deleted for 7 years — the legally defensible tamper-evidence layer.
-5. A **read path** (read Lambda) so compliance tools or dashboards can list events and run tamper-evidence checks by comparing the DynamoDB record against the locked S3 original.
+5. A **read path** (read Lambda) so compliance tools or dashboards can list events, run tamper-evidence checks (comparing the DynamoDB record against the locked S3 original), and run completeness checks that detect deleted records via per-tenant sequence gaps.
 
 You **deploy** this setup into your **AWS account** using the **CDK** project under `infra\cdk`. Until you deploy, nothing runs in the cloud — the folder on your PC is only the **recipe** and **code**.
 
